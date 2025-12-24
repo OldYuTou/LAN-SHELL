@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "updatedAt": "2025-12-24T11:20:38.390Z",
+  "root": {
+    "id": "root",
+    "type": "folder",
+    "name": "root",
+    "children": [
+      {
+        "id": "c_mjjmb7xf_4l1m",
+        "type": "folder",
+        "name": "frp",
+        "children": [
+          {
+            "id": "c_mjjmdyzs_r38m",
+            "type": "command",
+            "name": "修改配置",
+            "content": "sudo nano /etc/frp/frpc.toml",
+            "autoSend": true
+          },
+          {
+            "id": "c_mjjtzovb_ie9z",
+            "type": "command",
+            "name": "应用修改",
+            "content": "sudo systemctl restart frp",
+            "autoSend": true
+          },
+          {
+            "id": "c_mjju23fy_le40",
+            "type": "command",
+            "name": "查看状态",
+            "content": "sudo systemctl status frp",
+            "autoSend": true
+          },
+          {
+            "id": "c_mjju2g1a_xuvq",
+            "type": "command",
+            "name": "停止运行",
+            "content": "sudo systemctl stop frp",
+            "autoSend": true
+          },
+          {
+            "id": "c_mjju2rze_zjsm",
+            "type": "command",
+            "name": "开始运行",
+            "content": "sudo systemctl start frp",
+            "autoSend": true
+          }
+        ]
+      },
+      {
+        "id": "c_mjju4d6l_6p8b",
+        "type": "folder",
+        "name": "pm2",
+        "children": [
+          {
+            "id": "c_mjju507a_y39o",
+            "type": "command",
+            "name": "查看运行中的应用",
+            "content": "pm2 list",
+            "autoSend": true
+          },
+          {
+            "id": "c_mjju6292_d2ea",
+            "type": "command",
+            "name": "监控应用程序",
+            "content": "pm2 monitor",
+            "autoSend": true
+          },
+          {
+            "id": "c_mjju67gb_2xcw",
+            "type": "command",
+            "name": "查看日志",
+            "content": "pm2 log",
+            "autoSend": true
+          },
+          {
+            "id": "c_mjjvt89o_h9td",
+            "type": "command",
+            "name": "删除应用",
+            "content": "pm2 delete",
+            "autoSend": false
+          },
+          {
+            "id": "c_mjjvtlk8_luqa",
+            "type": "command",
+            "name": "创建应用",
+            "content": "pm2 start",
+            "autoSend": false
+          }
+        ]
+      },
+      {
+        "id": "c_mjjvl3ow_knuo",
+        "type": "folder",
+        "name": "文件系统",
+        "children": [
+          {
+            "id": "c_mjjvmwmz_ajny",
+            "type": "command",
+            "name": "创建文件夹",
+            "content": "mkdir",
+            "autoSend": false
+          },
+          {
+            "id": "c_mjjvo8sz_2vey",
+            "type": "command",
+            "name": "删除文件",
+            "content": "rm",
+            "autoSend": false
+          }
+        ]
+      },
+      {
+        "id": "c_mjjx9qyg_j0lk",
+        "type": "folder",
+        "name": "codex",
+        "children": [
+          {
+            "id": "c_mjjxa6t1_0zif",
+            "type": "command",
+            "name": "切换模型",
+            "content": "/model",
+            "autoSend": true
+          }
+        ]
+      }
+    ]
+  }
+}

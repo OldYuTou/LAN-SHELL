@@ -1,0 +1,3476 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <title>LAN Shell</title>
+  
+  <!-- 强制全屏模式 -->
+  <meta name="apple-touch-fullscreen" content="yes" />
+  <meta name="format-detection" content="telephone=no" />
+  <meta name="msapplication-tap-highlight" content="no" />
+  
+  <!-- 防止缩放和滚动 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  
+  <!-- PWA配置 -->
+  <meta name="theme-color" content="#0f1115" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="LAN Shell" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  
+  <!-- Edge PWA 专用配置 -->
+  <meta name="msapplication-TileColor" content="#0f1115" />
+  <meta name="msapplication-config" content="none" />
+  <meta name="msapplication-tap-highlight" content="no" />
+  <meta name="msapplication-navbutton-color" content="#0f1115" />
+  <meta name="msapplication-starturl" content="/?pwa=true&edge=true" />
+  <meta name="msapplication-window" content="width=device-width;height=device-height" />
+  
+  <!-- 安卓PWA强制全屏 -->
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f1115" />
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#0f1115" />
+  <meta name="color-scheme" content="dark" />
+  
+  <!-- 强制隐藏浏览器UI -->
+  <meta name="mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="msapplication-navbutton-color" content="#0f1115" />
+  <meta name="application-name" content="LAN Shell" />
+  
+  <!-- 防止显示浏览器控件 -->
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-touch-fullscreen" content="yes" />
+  <meta name="full-screen" content="yes" />
+  <meta name="browsermode" content="application" />
+  
+  <!-- Web App Manifest -->
+  <link rel="manifest" href="/manifest.json" />
+  
+  <!-- 图标 -->
+  <link rel="apple-touch-icon" sizes="180x180" href="/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/icon-192.png" />
+  
+  <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css">
+  <style>
+    :root { 
+      --bg:#0f1115; 
+      --panel:#f5f5f7; 
+      --accent:#2d8cff; 
+      --sidebar-width:380px;
+      --vh: 1vh;
+    }
+    
+    html {
+      height: 100%;
+      height: calc(var(--vh, 1vh) * 100);
+      overflow: hidden;
+    }
+    
+    body { 
+      margin:0; 
+      display:flex; 
+      flex-direction:column; 
+      height:100vh; 
+      height: calc(var(--vh, 1vh) * 100);
+      font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+      background:var(--bg); 
+      color:#eee;
+      overflow-x:hidden;
+      width:100vw;
+      max-width:100vw;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+    }
+    #top { 
+      display:flex; 
+      gap:8px; 
+      padding:12px; 
+      align-items:center; 
+      background:#131722; 
+      box-shadow:0 2px 8px rgba(0,0,0,.4); 
+      border-bottom:1px solid #2a2d3a;
+      transition:margin-left 0.3s;
+      margin-left:var(--sidebar-width);
+      flex-wrap:wrap;
+    }
+    body.sidebar-collapsed #top {
+      margin-left:0;
+    }
+    
+	    /* removed: logout button + mobile toolbar */
+    #path { flex:1; padding:10px 12px; border-radius:8px; border:1px solid #3a3d4a; background:#1c1f2b; color:#f7f7f7; font-size:14px; transition:border-color 0.2s; }
+    #path:focus { outline:none; border-color:var(--accent); }
+    button { padding:10px 16px; border:none; border-radius:8px; background:var(--accent); color:#fff; cursor:pointer; font-weight:600; font-size:14px; transition:all 0.2s; }
+    button:hover { background:#1e7ae8; transform:translateY(-1px); }
+    button:active { transform:translateY(0); }
+    #main { 
+      display:flex; 
+      flex:1; 
+      min-height:0; 
+      position:relative;
+      overflow:hidden;
+      width:100%;
+      max-width:100vw;
+    }
+    
+    /* 折叠状态下的布局调整 */
+    body.sidebar-collapsed #main {
+      margin-left:0;
+    }
+    body.sidebar-collapsed #top {
+      padding-left:60px; /* 为展开按钮留空间 */
+    }
+    
+    /* 侧边栏样式 */
+    #sidebar { 
+      width:var(--sidebar-width); 
+      height:100%; 
+      background:var(--panel); 
+      color:#111; 
+      display:flex; 
+      flex-direction:column; 
+      box-shadow:2px 0 10px rgba(0,0,0,.15);
+      transition:transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position:fixed;
+      left:0;
+      top:0;
+      z-index:10;
+    }
+    #sidebar.collapsed { 
+      transform:translateX(-100%); 
+    }
+    
+	    /* 折叠按钮 */
+	    #toggle-sidebar {
+	      position:absolute;
+	      left:calc(var(--sidebar-width) - 20px);
+	      top:50%;
+	      transform:translateY(-50%);
+	      width:40px;
+	      height:60px;
+	      background: rgba(45, 140, 255, 0.18);
+	      border: 1px solid rgba(45, 140, 255, 0.28);
+	      border-radius:0 8px 8px 0;
+	      color:#fff;
+	      cursor:pointer;
+	      display:flex;
+	      align-items:center;
+	      justify-content:center;
+	      font-size:16px;
+	      transition:all 0.3s;
+	      box-shadow:2px 0 12px rgba(0,0,0,.22);
+	      z-index:12;
+	    }
+    body.sidebar-collapsed #toggle-sidebar {
+      left:10px !important;
+      border-radius:8px !important;
+    }
+	    #toggle-sidebar:hover {
+	      background: rgba(45, 140, 255, 0.30);
+	      border-color: rgba(45, 140, 255, 0.55);
+	      width:45px;
+	    }
+    
+    /* 侧边栏头部 */
+    #sidebar-header {
+      padding:16px;
+      background:#e8e8ea;
+      border-bottom:1px solid #d1d1d6;
+      font-weight:600;
+      font-size:16px;
+      color:#1d1d1f;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    
+    /* 文件列表 */
+    #list { 
+      flex:1; 
+      overflow:auto; 
+      padding:12px; 
+      scrollbar-width:thin;
+      scrollbar-color:#ccc transparent;
+    }
+    #list::-webkit-scrollbar { width:6px; }
+    #list::-webkit-scrollbar-track { background:transparent; }
+    #list::-webkit-scrollbar-thumb { background:#ccc; border-radius:3px; }
+    #list::-webkit-scrollbar-thumb:hover { background:#999; }
+    
+    #term-wrap { 
+      flex:1; 
+      min-width:0; 
+      display:flex; 
+      flex-direction:column; 
+      transition:margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      margin-left:var(--sidebar-width);
+      will-change:margin-left;
+    }
+    body.sidebar-collapsed #term-wrap {
+      margin-left:0;
+    }
+    
+    #tabs { 
+      display:flex; 
+      gap:8px; 
+      padding:12px; 
+      background:#1b2030; 
+      border-bottom:1px solid #2a2d3a; 
+      overflow-x:auto;
+      scrollbar-width:none;
+    }
+    #tabs::-webkit-scrollbar { display:none; }
+    
+    .tab { 
+      padding:8px 12px; 
+      background:#2a3045; 
+      color:#eee; 
+      border-radius:8px; 
+      cursor:pointer; 
+      display:flex; 
+      align-items:center; 
+      gap:8px; 
+      white-space:nowrap;
+      transition:all 0.2s;
+      border:1px solid transparent;
+    }
+    .tab:hover { background:#3a4055; }
+    .tab.active { 
+      background:#3c83f6; 
+      border-color:#5a9cff;
+      box-shadow:0 2px 8px rgba(60,131,246,0.3);
+    }
+    .tab .close { 
+      font-weight:bold; 
+      cursor:pointer; 
+      padding:2px 4px;
+      border-radius:4px;
+      transition:background 0.2s;
+    }
+    .tab .close:hover { background:rgba(255,255,255,0.2); }
+    
+    #term-area { 
+      position:relative; 
+      flex:1; 
+      background:#0f1115;
+      overflow:hidden;
+      width:100%;
+      max-width:100%;
+      padding:5px; /* 减少内边距 */
+      box-sizing:border-box;
+    }
+    .term-pane { 
+      position:absolute; 
+      inset:5px; /* 对应padding */
+      overflow:hidden;
+      width:calc(100% - 10px);
+      height:calc(100% - 10px);
+    }
+    
+    .item { 
+      padding:10px 12px; 
+      border-radius:8px; 
+      margin-bottom:6px; 
+      cursor:pointer; 
+      transition:all 0.2s;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      font-size:15px;
+      font-weight:500;
+    }
+    .item:hover { 
+      background:rgba(0,0,0,0.08); 
+      transform:translateX(2px);
+    }
+    .item .file-name { 
+      flex:1; 
+      color:#1d1d1f;
+      font-weight:600;
+      font-size:15px;
+    }
+    .item .file-tag { 
+      color:#666; 
+      font-size:11px; 
+      background:#f0f0f0;
+      padding:3px 7px;
+      border-radius:4px;
+      font-weight:500;
+    }
+    
+    /* PWA样式优化 - 全屏模式 */
+    @media (display-mode: fullscreen), (display-mode: standalone) {
+      body {
+        /* 全屏模式下的额外样式 */
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+        height: 100vh;
+        height: 100dvh; /* 动态视口高度 */
+        overflow: hidden;
+      }
+      
+      #top {
+        /* 状态栏适配 */
+        padding-top: calc(12px + env(safe-area-inset-top));
+      }
+      
+      /* 隐藏所有可能的浏览器UI */
+      html {
+        overflow: hidden;
+        height: 100%;
+        height: 100dvh;
+      }
+      
+      /* 强制全屏 */
+      body {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100vw;
+        height: 100vh;
+        height: 100dvh;
+      }
+    }
+    
+    /* 防止页面被拉动 */
+    body {
+      overscroll-behavior: none;
+      -webkit-overflow-scrolling: touch;
+    }
+    
+    /* 禁用文本选择和长按菜单 */
+    * {
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      -khtml-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+    }
+    
+    /* 允许输入框选择文本 */
+    input, textarea, .xterm-helper-textarea {
+      -webkit-user-select: text;
+      -moz-user-select: text;
+      -ms-user-select: text;
+      user-select: text;
+    }
+    
+    /* 确保按钮可以接收触摸事件 */
+    button {
+      pointer-events: auto;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    @media (max-width: 768px) {
+      :root { --sidebar-width:300px; }
+      
+      body {
+        overflow-x:hidden !important;
+        position:fixed;
+        width:100vw;
+        height:100vh;
+      }
+      
+      #top { 
+        padding:8px;
+        width:100%;
+        box-sizing:border-box;
+        overflow:hidden;
+        justify-content:space-between;
+      }
+      
+	      /* removed: mobile toolbar */
+      
+      /* 手机端隐藏部分按钮文字 */
+      #load, #newTerm {
+        font-size:12px;
+        padding:6px 8px;
+      }
+      
+      #path {
+        flex:1;
+        min-width:120px;
+        font-size:12px;
+      }
+      
+      #main {
+        overflow:hidden !important;
+        width:100vw;
+        max-width:100vw;
+      }
+      
+      #sidebar {
+        max-width:100vw;
+        box-sizing:border-box;
+      }
+      
+      #term-wrap {
+        max-width:100vw;
+        box-sizing:border-box;
+        overflow:hidden;
+      }
+      
+      #term-area {
+        overflow:hidden !important;
+        width:100% !important;
+        max-width:100vw !important;
+      }
+      
+      .term-pane {
+        overflow:hidden !important;
+        width:100% !important;
+        max-width:100vw !important;
+      }
+      
+      /* 强制终端内容不超出屏幕 */
+      .xterm-viewport {
+        overflow-x:hidden !important;
+        width:100% !important;
+        max-width:100vw !important;
+      }
+      
+      .xterm-screen {
+        overflow-x:hidden !important;
+        width:100% !important;
+        max-width:100vw !important;
+      }
+      
+      #tabs {
+        overflow-x:auto;
+        scrollbar-width:none;
+        -ms-overflow-style:none;
+      }
+      
+      #tabs::-webkit-scrollbar {
+        display:none;
+      }
+      
+      button { padding:8px 12px; font-size:13px; }
+	    }
+
+	    /* 右侧悬浮入口 + 抽屉 */
+	    #side-actions {
+	      position: fixed;
+	      right: calc(12px + env(safe-area-inset-right, 0px));
+	      top: 50%;
+	      transform: translate(0, -50%);
+	      transition: transform 0.22s ease;
+	      z-index: 9999;
+	      display: flex;
+	      flex-direction: column;
+	      align-items: center;
+	      gap: 10px;
+	    }
+	    #side-actions.open {
+	      transform: translate(calc(-1 * var(--drawer-w, 0px)), -50%);
+	    }
+
+	    #drawerToggleBtn {
+	      width: 52px;
+	      height: 52px;
+	      border-radius: 14px;
+	      border: 1px solid rgba(255,255,255,0.20);
+	      background: transparent;
+	      color: #fff;
+	      cursor: pointer;
+	      box-shadow: 0 10px 26px rgba(0,0,0,0.40);
+	      font-size: 20px;
+	      display: flex;
+	      align-items: center;
+	      justify-content: center;
+	    }
+	    #drawerToggleBtn:hover {
+	      background: rgba(45, 140, 255, 0.12);
+	      border-color: rgba(45, 140, 255, 0.45);
+	    }
+
+	    #cmdsetFloatingBtn {
+	      width: 52px;
+	      height: 52px;
+	      border-radius: 14px;
+	      border: 1px solid rgba(255,255,255,0.20);
+	      background: transparent;
+	      color: #fff;
+	      cursor: pointer;
+	      box-shadow: 0 10px 26px rgba(0,0,0,0.40);
+	      font-size: 18px;
+	      display: flex;
+	      align-items: center;
+	      justify-content: center;
+	    }
+	    #cmdsetFloatingBtn:hover {
+	      background: rgba(45, 140, 255, 0.12);
+	      border-color: rgba(45, 140, 255, 0.45);
+	    }
+
+	    #comboFloatingBtn {
+	      width: 52px;
+	      height: 52px;
+	      border-radius: 14px;
+	      border: 1px solid rgba(255,255,255,0.20);
+	      background: transparent;
+	      color: #fff;
+	      cursor: pointer;
+	      box-shadow: 0 10px 26px rgba(0,0,0,0.40);
+	      font-size: 16px;
+	      display: flex;
+	      align-items: center;
+	      justify-content: center;
+	    }
+	    #comboFloatingBtn:hover {
+	      background: rgba(45, 140, 255, 0.12);
+	      border-color: rgba(45, 140, 255, 0.45);
+	    }
+
+	    #drawer-backdrop {
+	      position: fixed;
+	      inset: 0;
+	      background: rgba(0,0,0,0.55);
+	      z-index: 9998;
+	      display: none;
+	    }
+	    #drawer-backdrop.open { display: block; }
+
+	    #right-drawer {
+	      position: fixed;
+	      top: 0;
+	      right: 0;
+	      height: 100vh;
+	      height: 100dvh;
+	      width: auto;
+	      padding: 12px 10px;
+	      box-sizing: border-box;
+	      background: rgba(19, 23, 34, 0.96);
+	      border-left: 1px solid rgba(255,255,255,0.08);
+	      transform: translateX(110%);
+	      transition: transform 0.22s ease;
+	      z-index: 9999;
+	      display: flex;
+	      flex-direction: column;
+	      gap: 12px;
+	      backdrop-filter: blur(10px);
+	    }
+	    #right-drawer.open { transform: translateX(0); }
+
+	    #right-drawer .drawer-header {
+	      display: flex;
+	      align-items: center;
+	      justify-content: space-between;
+	      gap: 10px;
+	      padding-top: calc(6px + env(safe-area-inset-top, 0px));
+	    }
+	    #right-drawer .drawer-title {
+	      display: none;
+	    }
+	    #right-drawer .drawer-title {
+	      font-weight: 700;
+	      letter-spacing: 0.2px;
+	    }
+	    #drawerCloseBtn {
+	      width: 40px;
+	      height: 40px;
+	      border-radius: 12px;
+	      border: 1px solid rgba(255,255,255,0.10);
+	      background: rgba(26, 30, 44, 0.92);
+	      color: #fff;
+	      cursor: pointer;
+	    }
+	    #right-drawer .drawer-actions {
+	      display: flex;
+	      flex-direction: column;
+	      gap: 10px;
+	      margin-top: 8px;
+	    }
+	    #right-drawer .drawer-actions button {
+	      width: 84px;
+	      border-radius: 12px;
+	      border: 1px solid rgba(255,255,255,0.10);
+	      background: rgba(26, 30, 44, 0.92);
+	      color: #fff;
+	      padding: 10px 12px;
+	      font-size: 13px;
+	      display: flex;
+	      align-items: center;
+	      justify-content: center;
+	      gap: 10px;
+	    }
+	    #right-drawer .drawer-actions button .k {
+	      opacity: 0.75;
+	      font-size: 12px;
+	      border: 1px solid rgba(255,255,255,0.12);
+	      padding: 2px 8px;
+	      border-radius: 999px;
+	    }
+	    #right-drawer .drawer-actions button.active {
+	      background: rgba(45, 140, 255, 0.16);
+	      border-color: rgba(45, 140, 255, 0.65);
+	      box-shadow: 0 0 0 1px rgba(45, 140, 255, 0.25);
+	    }
+
+		    /* Paste modal (long-press on PASTE) */
+		    #paste-modal-backdrop {
+		      position: fixed;
+		      inset: 0;
+		      background: rgba(0,0,0,0.60);
+		      z-index: 10000;
+		      display: none;
+		    }
+		    #paste-modal-backdrop.open { display: block; }
+		    #paste-modal {
+		      position: fixed;
+		      left: 50%;
+		      top: 50%;
+		      transform: translate(-50%, -50%);
+		      width: min(92vw, 680px);
+		      max-height: min(80vh, 720px);
+		      background: rgba(19, 23, 34, 0.98);
+		      border: 1px solid rgba(255,255,255,0.10);
+		      border-radius: 16px;
+		      box-shadow: 0 18px 48px rgba(0,0,0,0.55);
+		      z-index: 10001;
+		      display: none;
+		      padding: 14px;
+		      box-sizing: border-box;
+		    }
+		    #paste-modal.open { display: block; }
+		    #paste-modal .row {
+		      display: flex;
+		      align-items: center;
+		      justify-content: space-between;
+		      gap: 10px;
+		      margin-bottom: 10px;
+		    }
+		    #paste-modal .title {
+		      font-weight: 700;
+		      font-size: 14px;
+		      opacity: 0.9;
+		    }
+		    #paste-modal .close {
+		      width: 40px;
+		      height: 40px;
+		      border-radius: 12px;
+		      border: 1px solid rgba(255,255,255,0.10);
+		      background: rgba(26, 30, 44, 0.92);
+		      color: #fff;
+		      cursor: pointer;
+		    }
+		    #paste-input {
+		      width: 100%;
+		      height: min(46vh, 420px);
+		      resize: vertical;
+		      border-radius: 12px;
+		      border: 1px solid rgba(255,255,255,0.12);
+		      background: rgba(26, 30, 44, 0.92);
+		      color: #fff;
+		      padding: 10px 12px;
+		      box-sizing: border-box;
+		      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+		      font-size: 13px;
+		      line-height: 1.35;
+		      outline: none;
+		    }
+		    #paste-modal .actions {
+		      display: flex;
+		      justify-content: flex-end;
+		      gap: 10px;
+		      margin-top: 10px;
+		    }
+		    #paste-modal .actions button {
+		      border-radius: 12px;
+		      padding: 10px 14px;
+		      font-size: 13px;
+		      border: 1px solid rgba(255,255,255,0.10);
+		      background: rgba(26, 30, 44, 0.92);
+		    }
+		    #paste-modal .actions button.primary {
+		      background: rgba(45, 140, 255, 0.92);
+		      border-color: rgba(45, 140, 255, 0.65);
+		    }
+
+		    /* 组合键弹窗 */
+		    #combo-modal-backdrop {
+		      position: fixed;
+		      inset: 0;
+		      background: rgba(0,0,0,0.60);
+		      z-index: 10020;
+		      display: none;
+		    }
+		    #combo-modal-backdrop.open { display: block; }
+		    #combo-modal {
+		      position: fixed;
+		      left: 50%;
+		      top: 50%;
+		      transform: translate(-50%, -50%);
+		      width: min(92vw, 520px);
+		      max-height: min(80vh, 520px);
+		      background: rgba(19, 23, 34, 0.98);
+		      border: 1px solid rgba(255,255,255,0.10);
+		      border-radius: 16px;
+		      box-shadow: 0 18px 48px rgba(0,0,0,0.55);
+		      z-index: 10021;
+		      display: none;
+		      padding: 14px;
+		      box-sizing: border-box;
+		    }
+		    #combo-modal.open { display: block; }
+		    #combo-modal .row {
+		      display: flex;
+		      align-items: center;
+		      justify-content: space-between;
+		      gap: 10px;
+		      margin-bottom: 12px;
+		    }
+		    #combo-modal .title {
+		      font-weight: 800;
+		      font-size: 14px;
+		      opacity: 0.9;
+		    }
+		    #combo-modal .close {
+		      width: 40px;
+		      height: 40px;
+		      border-radius: 12px;
+		      border: 1px solid rgba(255,255,255,0.10);
+		      background: rgba(26, 30, 44, 0.92);
+		      color: #fff;
+		      cursor: pointer;
+		    }
+		    .combo-toggle {
+		      display: flex;
+		      gap: 8px;
+		      margin-bottom: 10px;
+		    }
+		    .combo-toggle button {
+		      flex: 1;
+		      border-radius: 12px;
+		      border: 1px solid rgba(255,255,255,0.10);
+		      background: rgba(26, 30, 44, 0.92);
+		      color: #fff;
+		      padding: 10px 12px;
+		      font-size: 13px;
+		      cursor: pointer;
+		    }
+		    .combo-toggle button.active {
+		      background: rgba(45, 140, 255, 0.22);
+		      border-color: rgba(45, 140, 255, 0.65);
+		    }
+		    #combo-input {
+		      width: 100%;
+		      border-radius: 12px;
+		      border: 1px solid rgba(255,255,255,0.12);
+		      background: rgba(26, 30, 44, 0.92);
+		      color: #fff;
+		      padding: 10px 12px;
+		      box-sizing: border-box;
+		      font-size: 14px;
+		      outline: none;
+		      margin-bottom: 12px;
+		    }
+		    #combo-modal .actions {
+		      display: flex;
+		      justify-content: flex-end;
+		      gap: 10px;
+		    }
+		    #combo-modal .actions button {
+		      border-radius: 12px;
+		      padding: 10px 14px;
+		      font-size: 13px;
+		      border: 1px solid rgba(255,255,255,0.10);
+		      background: rgba(26, 30, 44, 0.92);
+		      color: #fff;
+		      cursor: pointer;
+		    }
+		    #combo-modal .actions button.primary {
+		      background: rgba(45, 140, 255, 0.92);
+		      border-color: rgba(45, 140, 255, 0.65);
+		    }
+
+		    /* 指令集页面（全屏覆盖） */
+		    #cmdset-page {
+		      position: fixed;
+		      inset: 0;
+		      background: rgba(15, 17, 21, 0.98);
+		      z-index: 10050;
+		      display: none;
+		      flex-direction: column;
+		      box-sizing: border-box;
+		      padding: calc(env(safe-area-inset-top, 0px)) calc(env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px)) calc(env(safe-area-inset-left, 0px));
+		    }
+		    #cmdset-page.open { display: flex; }
+
+		    .cmdset-topbar {
+		      display: flex;
+		      align-items: center;
+		      justify-content: space-between;
+		      gap: 10px;
+		      padding: 12px;
+		      border-bottom: 1px solid rgba(255,255,255,0.08);
+		      background: rgba(19, 23, 34, 0.98);
+		    }
+		    .cmdset-icon-btn {
+		      width: 40px;
+		      height: 40px;
+		      border-radius: 12px;
+		      border: 1px solid rgba(255,255,255,0.10);
+		      background: rgba(26, 30, 44, 0.92);
+		      color: #fff;
+		      cursor: pointer;
+		      display: inline-flex;
+		      align-items: center;
+		      justify-content: center;
+		      font-size: 16px;
+		      padding: 0;
+		    }
+		    .cmdset-title-wrap { flex: 1; min-width: 0; }
+		    .cmdset-title { font-weight: 800; font-size: 14px; letter-spacing: 0.2px; }
+		    .cmdset-breadcrumb {
+		      margin-top: 3px;
+		      font-size: 12px;
+		      opacity: 0.75;
+		      white-space: nowrap;
+		      overflow: hidden;
+		      text-overflow: ellipsis;
+		    }
+		    .cmdset-top-actions {
+		      display: flex;
+		      gap: 8px;
+		      flex-wrap: wrap;
+		      justify-content: flex-end;
+		    }
+		    .cmdset-small-btn {
+		      border-radius: 12px;
+		      border: 1px solid rgba(255,255,255,0.10);
+		      background: rgba(26, 30, 44, 0.92);
+		      color: #fff;
+		      padding: 10px 12px;
+		      font-size: 13px;
+		      cursor: pointer;
+		      white-space: nowrap;
+		    }
+		    .cmdset-small-btn.primary {
+		      background: rgba(45, 140, 255, 0.92);
+		      border-color: rgba(45, 140, 255, 0.65);
+		    }
+
+		    .cmdset-body {
+		      flex: 1;
+		      min-height: 0;
+		      overflow: auto;
+		      padding: 12px;
+		      box-sizing: border-box;
+		    }
+		    .cmdset-empty {
+		      padding: 18px 12px;
+		      opacity: 0.75;
+		      font-size: 13px;
+		    }
+
+		    .cmdset-item {
+		      display: flex;
+		      align-items: center;
+		      gap: 10px;
+		      padding: 10px 12px;
+		      border-radius: 12px;
+		      border: 1px solid rgba(255,255,255,0.08);
+		      background: rgba(26, 30, 44, 0.62);
+		      cursor: pointer;
+		      margin-bottom: 10px;
+		      transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+		    }
+		    .cmdset-item:hover {
+		      transform: translateX(2px);
+		      background: rgba(26, 30, 44, 0.82);
+		      border-color: rgba(45, 140, 255, 0.20);
+		    }
+		    .cmdset-item .ico { width: 22px; text-align: center; opacity: 0.9; }
+		    .cmdset-item .name {
+		      flex: 1;
+		      min-width: 0;
+		      font-weight: 750;
+		      font-size: 14px;
+		      white-space: nowrap;
+		      overflow: hidden;
+		      text-overflow: ellipsis;
+		    }
+		    .cmdset-item .meta {
+		      font-size: 12px;
+		      opacity: 0.7;
+		      white-space: nowrap;
+		      max-width: 40%;
+		      overflow: hidden;
+		      text-overflow: ellipsis;
+		    }
+		    .cmdset-edit {
+		      border-radius: 12px;
+		      border: 1px solid rgba(255,255,255,0.18);
+		      background: rgba(255,255,255,0.08);
+		      color: #fff;
+		      padding: 8px 10px;
+		      font-size: 13px;
+		      cursor: pointer;
+		    }
+		    .cmdset-edit:hover {
+		      background: rgba(45, 140, 255, 0.18);
+		      border-color: rgba(45, 140, 255, 0.45);
+		    }
+
+		    /* 指令集：通用弹窗 */
+		    #cmdset-modal-backdrop, #cmdset-confirm-backdrop {
+		      position: fixed;
+		      inset: 0;
+		      background: rgba(0,0,0,0.60);
+		      z-index: 10060;
+		      display: none;
+		    }
+		    #cmdset-modal-backdrop.open, #cmdset-confirm-backdrop.open { display: block; }
+
+		    #cmdset-modal, #cmdset-confirm-modal {
+		      position: fixed;
+		      left: 50%;
+		      top: 50%;
+		      transform: translate(-50%, -50%);
+		      width: min(92vw, 720px);
+		      max-height: min(82vh, 760px);
+		      background: rgba(19, 23, 34, 0.98);
+		      border: 1px solid rgba(255,255,255,0.10);
+		      border-radius: 16px;
+		      box-shadow: 0 18px 48px rgba(0,0,0,0.55);
+		      z-index: 10061;
+		      display: none;
+		      padding: 14px;
+		      box-sizing: border-box;
+		    }
+		    #cmdset-modal.open, #cmdset-confirm-modal.open { display: block; }
+
+		    .cmdset-modal-row {
+		      display: flex;
+		      align-items: center;
+		      justify-content: space-between;
+		      gap: 10px;
+		      margin-bottom: 10px;
+		    }
+		    .cmdset-modal-title { font-weight: 800; font-size: 14px; opacity: 0.95; }
+		    .cmdset-modal-close {
+		      width: 40px;
+		      height: 40px;
+		      border-radius: 12px;
+		      border: 1px solid rgba(255,255,255,0.10);
+		      background: rgba(26, 30, 44, 0.92);
+		      color: #fff;
+		      cursor: pointer;
+		    }
+		    .cmdset-field { margin-top: 10px; }
+		    .cmdset-field label { display:block; font-size: 12px; opacity:0.8; margin-bottom: 6px; }
+		    .cmdset-field input, .cmdset-field textarea {
+		      width: 100%;
+		      border-radius: 12px;
+		      border: 1px solid rgba(255,255,255,0.12);
+		      background: rgba(26, 30, 44, 0.92);
+		      color: #fff;
+		      padding: 10px 12px;
+		      box-sizing: border-box;
+		      font-size: 13px;
+		      outline: none;
+		    }
+		    .cmdset-field textarea {
+		      height: min(34vh, 340px);
+		      resize: vertical;
+		      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+		      line-height: 1.35;
+		    }
+		    .cmdset-modal-actions {
+		      display: flex;
+		      justify-content: flex-end;
+		      gap: 10px;
+		      margin-top: 12px;
+		    }
+		    .cmdset-modal-actions button {
+		      border-radius: 12px;
+		      padding: 10px 14px;
+		      font-size: 13px;
+		      border: 1px solid rgba(255,255,255,0.10);
+		      background: rgba(26, 30, 44, 0.92);
+		      color: #fff;
+		      cursor: pointer;
+		    }
+		    .cmdset-modal-actions button.primary {
+		      background: rgba(45, 140, 255, 0.92);
+		      border-color: rgba(45, 140, 255, 0.65);
+		    }
+		    .cmdset-modal-actions button.danger {
+		      background: rgba(255, 80, 80, 0.24);
+		      border-color: rgba(255, 80, 80, 0.60);
+		      color: #ff6b6b;
+		    }
+		  </style>
+		</head>
+		<body>
+  <div id="top">
+    <input id="path" value="." />
+    <button id="load">打开目录</button>
+    <button id="newTerm">在此启动终端</button>
+	    <!-- removed: mobile toolbar + logout -->
+	  </div>
+  <div id="main">
+    <button id="toggle-sidebar" title="折叠/展开侧边栏">‹</button>
+    <div id="sidebar">
+      <div id="sidebar-header">
+        <span>📁</span>
+        <span>文件浏览器</span>
+      </div>
+      <div id="list"></div>
+    </div>
+	    <div id="term-wrap">
+	      <div id="tabs"></div>
+	      <div id="term-area"></div>
+	    </div>
+	  </div>
+
+	  <!-- 右侧悬浮入口 + 抽屉 -->
+	  <div id="side-actions">
+	    <button id="drawerToggleBtn" title="Tools">≡</button>
+	    <button id="cmdsetFloatingBtn" title="指令集">⌘</button>
+	    <button id="comboFloatingBtn" title="组合键">⌥⌘</button>
+	  </div>
+		  <div id="drawer-backdrop"></div>
+		  <aside id="right-drawer" aria-hidden="true">
+		    <div class="drawer-header">
+		      <div class="drawer-title">Tools</div>
+		      <button id="drawerCloseBtn" title="Close">×</button>
+		    </div>
+			    <div class="drawer-actions">
+			      <button id="copyLatestBtn" title="Copy last output">
+			        <span class="k">COPY</span>
+			      </button>
+		      <button id="pasteClipboardBtn" title="Paste clipboard">
+		        <span class="k">PASTE</span>
+		      </button>
+		      <button id="upBtn" title="Up arrow">
+		        <span class="k">UP</span>
+		      </button>
+				      <button id="downBtn" title="Down arrow">
+				        <span class="k">DOWN</span>
+			      </button>
+			      <button id="tabBtn" title="Tab">
+			        <span class="k">TAB</span>
+			      </button>
+			      <button id="enterBtn" title="Enter">
+			        <span class="k">ENTER</span>
+			      </button>
+			      <button id="continueBtn" title="ESC, then continue, then Enter">
+		        <span class="k">CONT</span>
+		      </button>
+		      <button id="escBtn" title="Send ESC">
+		        <span class="k">ESC</span>
+		      </button>
+		      <button id="ctrlCBtn" title="Send Ctrl+C">
+		        <span class="k">^C</span>
+		      </button>
+		    </div>
+		  </aside>
+
+		  <!-- 长按 PASTE 弹出输入框 -->
+		  <div id="paste-modal-backdrop" aria-hidden="true"></div>
+			  <div id="paste-modal" role="dialog" aria-modal="true" aria-hidden="true">
+			    <div class="row">
+			      <div class="title">PASTE</div>
+			      <button class="close" id="pasteModalCloseBtn" title="Close">×</button>
+			    </div>
+			    <textarea id="paste-input" placeholder="Paste text here…" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+			    <div class="actions">
+			      <button id="pasteModalCancelBtn">Cancel</button>
+			      <button id="pasteModalOkBtn" class="primary">OK</button>
+			    </div>
+			  </div>
+
+			  <!-- 组合键弹窗 -->
+			  <div id="combo-modal-backdrop" aria-hidden="true"></div>
+			  <div id="combo-modal" role="dialog" aria-modal="true" aria-hidden="true">
+			    <div class="row">
+			      <div class="title">发送组合键</div>
+			      <button class="close" id="comboModalCloseBtn" title="Close">×</button>
+			    </div>
+			    <div class="combo-toggle">
+			      <button id="comboCtrlBtn">Ctrl</button>
+			      <button id="comboAltBtn">Alt</button>
+			      <button id="comboShiftBtn">Shift</button>
+			    </div>
+			    <input id="combo-input" placeholder="输入要配合的字符，如：x" spellcheck="false" autocapitalize="off" autocorrect="off" />
+			    <div class="actions">
+			      <button id="comboModalCancelBtn">取消</button>
+			      <button id="comboModalOkBtn" class="primary">确定</button>
+			    </div>
+			  </div>
+
+			  <!-- 指令集页面 -->
+			  <div id="cmdset-page" aria-hidden="true">
+			    <div class="cmdset-topbar">
+			      <button id="cmdsetBackBtn" class="cmdset-icon-btn" title="返回">←</button>
+			      <div class="cmdset-title-wrap">
+			        <div class="cmdset-title">指令集</div>
+			        <div id="cmdsetBreadcrumb" class="cmdset-breadcrumb"></div>
+			      </div>
+			      <div class="cmdset-top-actions">
+			        <button id="cmdsetNewCommandBtn" class="cmdset-small-btn primary">新建指令</button>
+			        <button id="cmdsetNewFolderBtn" class="cmdset-small-btn">新建文件夹</button>
+			      </div>
+			    </div>
+			    <div id="cmdsetBody" class="cmdset-body">
+			      <div id="cmdsetEmpty" class="cmdset-empty" style="display:none;">暂无指令或文件夹</div>
+			      <div id="cmdsetList"></div>
+			    </div>
+			  </div>
+
+			  <!-- 指令集：新建弹窗 -->
+			  <div id="cmdset-modal-backdrop" aria-hidden="true"></div>
+			  <div id="cmdset-modal" role="dialog" aria-modal="true" aria-hidden="true">
+			    <div class="cmdset-modal-row">
+			      <div class="cmdset-modal-title" id="cmdsetModalTitle">新建指令</div>
+			      <button class="cmdset-modal-close" id="cmdsetModalCloseBtn" title="Close">×</button>
+			    </div>
+			    <div class="cmdset-field">
+			      <label for="cmdsetNameInput">名称</label>
+			      <input id="cmdsetNameInput" placeholder="例如：打开frp" spellcheck="false" autocapitalize="off" autocorrect="off" />
+			    </div>
+			    <div class="cmdset-field" id="cmdsetContentField">
+			      <label for="cmdsetContentInput">内容</label>
+			      <textarea id="cmdsetContentInput" placeholder="例如：start frp" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+			    </div>
+			    <div class="cmdset-field" id="cmdsetAutoSendField">
+			      <label style="display:flex;align-items:center;gap:8px;">
+			        <input type="checkbox" id="cmdsetAutoSendInput" style="width:16px;height:16px;" />
+			        <span>创建后点击自动发送（会自动回车）</span>
+			      </label>
+			    </div>
+			    <div class="cmdset-modal-actions" style="justify-content:space-between;">
+			      <button id="cmdsetModalDeleteBtn" class="danger" style="margin-right:auto; display:none;">删除</button>
+			      <div style="display:flex; gap:10px; margin-left:auto;">
+			        <button id="cmdsetModalCancelBtn">取消</button>
+			        <button id="cmdsetModalOkBtn" class="primary">确定</button>
+			      </div>
+			    </div>
+			  </div>
+
+			  <!-- 指令集：删除确认弹窗 -->
+			  <div id="cmdset-confirm-backdrop" aria-hidden="true"></div>
+			  <div id="cmdset-confirm-modal" role="dialog" aria-modal="true" aria-hidden="true">
+			    <div class="cmdset-modal-row">
+			      <div class="cmdset-modal-title">确认删除</div>
+			      <button class="cmdset-modal-close" id="cmdsetConfirmCloseBtn" title="Close">×</button>
+			    </div>
+			    <div id="cmdsetConfirmText" style="font-size:13px; opacity:0.85; line-height:1.5;"></div>
+			    <div class="cmdset-modal-actions">
+			      <button id="cmdsetConfirmCancelBtn">取消</button>
+			      <button id="cmdsetConfirmOkBtn" class="danger">删除</button>
+			    </div>
+			  </div>
+
+			  <script src="https://unpkg.com/xterm/lib/xterm.js"></script>
+			  <!-- 可选：WebGL 渲染加速（加载失败时自动降级） -->
+			  <script src="https://unpkg.com/xterm-addon-webgl/lib/xterm-addon-webgl.js"></script>
+			  <script>
+    // PWA全屏和隐藏地址栏功能
+    function hideAddressBar() {
+      // 强制滚动隐藏地址栏
+      setTimeout(() => {
+        window.scrollTo(0, 1);
+        window.scrollTo(0, 0);
+      }, 100);
+      
+      // 请求全屏模式
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {
+          // 全屏请求失败时的备用方案
+          console.log('全屏模式请求被拒绝');
+        });
+      }
+    }
+
+    // 检测PWA模式
+    function isPWA() {
+      // 检查URL参数
+      const urlParams = new URLSearchParams(window.location.search);
+      const isPWAParam = urlParams.get('pwa') === 'true';
+      const isSourcePWA = urlParams.get('source') === 'pwa';
+      const isEdgeParam = urlParams.get('edge') === 'true';
+      
+      // 检查User Agent是否为Edge
+      const isEdge = /Edg/i.test(navigator.userAgent);
+      
+      // 检查display-mode
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                          window.matchMedia('(display-mode: fullscreen)').matches ||
+                          window.navigator.standalone === true;
+      
+      // PWA检测（支持新旧参数）
+      const isPWAMode = isPWAParam || isSourcePWA || isStandalone;
+      
+      // Edge特殊检测
+      const isEdgePWA = isEdge && (isPWAMode || isEdgeParam);
+      
+      return isPWAMode || isEdgePWA;
+    }
+
+    // Edge PWA模式下的特殊处理
+    function applyEdgePWAStyles() {
+      const isEdge = /Edg/i.test(navigator.userAgent);
+      
+      if (isEdge && isPWA()) {
+        console.log('Edge PWA模式激活，应用特殊样式');
+        
+        // Edge专用样式
+        const style = document.createElement('style');
+        style.textContent = `
+          /* Edge PWA 专用样式 */
+          html {
+            overflow: hidden !important;
+            height: 100vh !important;
+            height: 100dvh !important;
+          }
+          
+          body {
+            overflow: hidden !important;
+            height: 100vh !important;
+            height: 100dvh !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100vw !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          
+          /* 确保顶部工具栏在Edge中可见 */
+          #top {
+            position: relative !important;
+            z-index: 1000 !important;
+            display: flex !important;
+            flex-shrink: 0 !important;
+          }
+          
+	          /* removed: mobile toolbar */
+          
+          /* Edge 调整主内容区域 */
+          #main {
+            height: calc(100vh - 60px) !important;
+            height: calc(100dvh - 60px) !important;
+            overflow: hidden !important;
+            flex: 1 !important;
+            position: relative !important;
+          }
+          
+          /* Edge 特殊处理 */
+          @media screen and (-ms-high-contrast: active), (-ms-high-contrast: none) {
+            body {
+              -ms-content-zooming: none;
+              -ms-user-select: none;
+              -ms-touch-action: manipulation;
+            }
+          }
+        `;
+        document.head.appendChild(style);
+        
+        // 设置Edge PWA标识
+        document.body.classList.add('edge-pwa-mode');
+        document.documentElement.classList.add('edge-pwa-mode');
+        
+        // Edge特殊的全屏请求
+        setTimeout(() => {
+          if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(() => {
+              console.log('Edge全屏请求被拒绝');
+            });
+          }
+        }, 1000);
+      }
+    }
+
+    // PWA模式下的特殊处理
+    function applyPWAStyles() {
+      if (isPWA()) {
+        console.log('PWA模式激活，应用全屏样式');
+        
+        // 添加PWA专用样式
+        const style = document.createElement('style');
+        style.textContent = `
+          html {
+            overflow: hidden !important;
+            height: 100vh !important;
+            height: 100dvh !important;
+          }
+          
+          body {
+            overflow: hidden !important;
+            height: 100vh !important;
+            height: 100dvh !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100vw !important;
+            margin: 0 !important;
+            /* 保留顶部工具栏空间 */
+            padding: 0 !important;
+          }
+          
+          /* 确保顶部工具栏可见 */
+          #top {
+            position: relative !important;
+            z-index: 1000 !important;
+            display: flex !important;
+            flex-shrink: 0 !important;
+          }
+          
+	          /* removed: mobile toolbar */
+          
+          /* 调整主内容区域 */
+          #main {
+            height: calc(100vh - 60px) !important;
+            height: calc(100dvh - 60px) !important;
+            overflow: hidden !important;
+            flex: 1 !important;
+          }
+          
+          /* 隐藏可能的浏览器UI */
+          body::before {
+            content: '';
+            position: fixed;
+            top: -100px;
+            left: 0;
+            right: 0;
+            height: 100px;
+            background: #0f1115;
+            z-index: -1;
+          }
+          
+          body::after {
+            content: '';
+            position: fixed;
+            bottom: -100px;
+            left: 0;
+            right: 0;
+            height: 100px;
+            background: #0f1115;
+            z-index: -1;
+          }
+        `;
+        document.head.appendChild(style);
+        
+        // 设置PWA标识
+        document.body.classList.add('pwa-mode');
+        document.documentElement.classList.add('pwa-mode');
+      }
+    }
+
+	    // 强制隐藏移动端地址栏和底部栏
+	    function forceMobileFullscreen() {
+	      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+	        // 设置视口高度
+	        const setViewportHeight = () => {
+	          // 优先使用 VisualViewport：iOS/Android 的软键盘弹出通常只会触发 visualViewport.resize，
+	          // 不一定会触发 window.resize；如果只用 innerHeight，终端区域不会跟着“变矮”，输入行就会被键盘挡住。
+	          const vv = window.visualViewport;
+	          const height = Math.max(0, Math.floor((vv?.height || window.innerHeight || 0)));
+	          if (!height) return;
+
+	          const vh = (height * 0.01);
+	          document.documentElement.style.setProperty('--vh', `${vh}px`);
+
+	          // 强制设置高度，驱动 #term-area 触发 ResizeObserver -> xterm resize
+	          document.body.style.height = height + 'px';
+	          document.documentElement.style.height = height + 'px';
+	        };
+	        
+	        setViewportHeight();
+	        window.addEventListener('resize', setViewportHeight);
+
+	        // 键盘弹出/收起时：更可靠的事件源
+	        try {
+	          const vv = window.visualViewport;
+	          if (vv) {
+	            vv.addEventListener('resize', setViewportHeight);
+	            vv.addEventListener('scroll', setViewportHeight);
+	          }
+	        } catch {}
+
+	        // 终端聚焦时（点击输出区域会触发 xterm 的隐藏 textarea focus），再补几次延迟刷新，
+	        // 适配不同浏览器键盘动画时序，确保输入行不被挡住。
+	        const scheduleKeyboardRelayout = () => {
+	          setViewportHeight();
+	          setTimeout(setViewportHeight, 50);
+	          setTimeout(setViewportHeight, 250);
+	          setTimeout(() => {
+	            try {
+	              const s = getActive?.();
+	              if (!s?.term) return;
+	              // 如果当前在底部，尽量保持光标/输入行可见
+	              if (isTermAtBottom(s.term) && typeof s.term.scrollToBottom === 'function') {
+	                s.term.scrollToBottom();
+	              }
+	              s.resizeTerminal?.();
+	            } catch {}
+	          }, 80);
+	        };
+
+	        document.addEventListener('focusin', (e) => {
+	          const t = e?.target;
+	          if (t && t.classList && t.classList.contains('xterm-helper-textarea')) {
+	            scheduleKeyboardRelayout();
+	            // 兜底：部分机型/浏览器会重建 textarea，确保 IME 监听存在
+	            try {
+	              const s = getActive?.();
+	              installImeWorkaround?.(s);
+	            } catch {}
+	          }
+	        }, true);
+
+	        // 在终端区域点击时也触发一次（某些机型 focusin 事件时机偏晚）
+	        try {
+	          document.getElementById('term-area')?.addEventListener('pointerdown', () => {
+	            scheduleKeyboardRelayout();
+	          }, { passive: true });
+	        } catch {}
+
+	        window.addEventListener('orientationchange', () => {
+	          setTimeout(setViewportHeight, 100);
+	          setTimeout(setViewportHeight, 500);
+	        });
+        
+        // 多次尝试隐藏地址栏
+        const hideAddressBarMultiple = () => {
+          for (let i = 0; i < 10; i++) {
+            setTimeout(() => {
+              window.scrollTo(0, 1);
+              setTimeout(() => window.scrollTo(0, 0), 10);
+            }, i * 100);
+          }
+        };
+        
+        hideAddressBarMultiple();
+        
+        // 页面获得焦点时重新隐藏
+        window.addEventListener('focus', hideAddressBarMultiple);
+        window.addEventListener('pageshow', hideAddressBarMultiple);
+        
+        // 安卓特殊处理
+        if (/Android/i.test(navigator.userAgent)) {
+          // 强制全屏模式
+          document.documentElement.style.overflow = 'hidden';
+          document.body.style.overflow = 'hidden';
+          
+          // 尝试请求全屏
+          const requestFullscreen = () => {
+            const element = document.documentElement;
+            if (element.requestFullscreen) {
+              element.requestFullscreen().catch(() => {});
+            } else if (element.webkitRequestFullscreen) {
+              element.webkitRequestFullscreen().catch(() => {});
+            } else if (element.mozRequestFullScreen) {
+              element.mozRequestFullScreen().catch(() => {});
+            } else if (element.msRequestFullscreen) {
+              element.msRequestFullscreen().catch(() => {});
+            }
+          };
+          
+          // 延迟请求全屏
+          setTimeout(requestFullscreen, 1000);
+          
+          // 用户交互后再次尝试
+          document.addEventListener('touchstart', requestFullscreen, { once: true });
+          document.addEventListener('click', requestFullscreen, { once: true });
+        }
+      }
+    }
+
+    // PWA安装提示
+    let deferredPrompt;
+    
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      
+      // 显示安装提示
+      const installBanner = document.createElement('div');
+      installBanner.innerHTML = `
+        <div style="position: fixed; top: 0; left: 0; right: 0; background: #2d8cff; color: white; padding: 10px; text-align: center; z-index: 1000;">
+          <span>📱 添加到主屏幕以获得更好的体验</span>
+          <button onclick="installPWA()" style="margin-left: 10px; background: white; color: #2d8cff; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">安装</button>
+          <button onclick="this.parentElement.parentElement.remove()" style="margin-left: 5px; background: transparent; color: white; border: 1px solid white; padding: 5px 10px; border-radius: 4px; cursor: pointer;">稍后</button>
+        </div>
+      `;
+      document.body.appendChild(installBanner);
+    });
+    
+    window.installPWA = async () => {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        console.log(`PWA安装结果: ${outcome}`);
+        deferredPrompt = null;
+        
+        // 移除安装横幅
+        const banner = document.querySelector('[style*="position: fixed"]');
+        if (banner) banner.parentElement.remove();
+      }
+    };
+    
+    // Register Service Worker (required for "Install/Add to Home screen" standalone PWA on Android Edge)
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then((registration) => {
+            console.log('SW registered: ', registration.scope);
+          })
+          .catch((error) => {
+            console.log('SW registration failed: ', error);
+          });
+      });
+    }
+
+    // 取消鉴权：不再需要 token
+    const urlParams = new URLSearchParams(window.location.search);
+    const authToken = urlParams.get('token');
+
+	    // removed: mobile toolbar (copy/paste via side buttons)
+	    function initMobileToolbar() {}
+
+    // 显示提示消息
+    function showToast(message) {
+      const toast = document.createElement('div');
+      toast.textContent = message;
+      toast.style.cssText = `
+        position: fixed;
+        top: 70px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0,0,0,0.8);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 14px;
+        z-index: 1000;
+        pointer-events: none;
+        max-width: 80%;
+        text-align: center;
+      `;
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.remove();
+      }, 3000);
+    }
+
+    // 备用复制方法（使用传统方法）
+    function fallbackCopyText(text) {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      textArea.style.top = '-999999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      
+      try {
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        return successful;
+      } catch (err) {
+        document.body.removeChild(textArea);
+        return false;
+      }
+    }
+
+	    // 侧边栏折叠功能
+	    const sidebar = document.getElementById('sidebar');
+	    const toggleBtn = document.getElementById('toggle-sidebar');
+	    // Default: collapsed when entering the page
+	    let sidebarCollapsed = true;
+	    sidebar.classList.toggle('collapsed', sidebarCollapsed);
+	    document.body.classList.toggle('sidebar-collapsed', sidebarCollapsed);
+	    toggleBtn.textContent = sidebarCollapsed ? '›' : '‹';
+	    toggleBtn.title = sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏';
+
+	    toggleBtn.onclick = () => {
+	      sidebarCollapsed = !sidebarCollapsed;
+	      sidebar.classList.toggle('collapsed', sidebarCollapsed);
+	      document.body.classList.toggle('sidebar-collapsed', sidebarCollapsed);
+      toggleBtn.textContent = sidebarCollapsed ? '›' : '‹';
+      toggleBtn.title = sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏';
+      
+      // 侧边栏状态改变后，强制重新计算所有终端的尺寸
+      setTimeout(() => {
+        sessions.forEach(session => {
+          if (session.resizeTerminal) {
+            session.resizeTerminal();
+          }
+        });
+      }, 350); // 等待CSS动画完成
+    };
+
+
+
+	    // 键盘快捷键：Ctrl+B 切换侧边栏
+	    document.addEventListener('keydown', (e) => {
+	      if (e.ctrlKey && e.key === 'b') {
+	        e.preventDefault();
+	        toggleBtn.click();
+	      }
+	      
+	      // 手机端额外快捷键
+	      if (window.innerWidth <= 768) {
+	        if (e.ctrlKey && e.key === 'c' && e.shiftKey) {
+	          // Ctrl+Shift+C 复制
+	          e.preventDefault();
+	          document.getElementById('copyLatestBtn')?.click();
+	        } else if (e.ctrlKey && e.key === 'v' && e.shiftKey) {
+	          // Ctrl+Shift+V 粘贴
+	          e.preventDefault();
+	          document.getElementById('pasteClipboardBtn')?.click();
+	        }
+	      }
+	    });
+
+		    // 会话管理（以服务端为准：关闭=删除，刷新=恢复剩余会话）
+		    const CLIENT_ID_KEY = 'lanshell_client_id';
+
+		    function getClientId() {
+		      try {
+		        const existing = localStorage.getItem(CLIENT_ID_KEY);
+		        if (existing) return existing;
+		        const id =
+		          (crypto && typeof crypto.randomUUID === 'function' && crypto.randomUUID()) ||
+		          `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
+		        localStorage.setItem(CLIENT_ID_KEY, id);
+		        return id;
+		      } catch {
+		        return `anon-${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
+		      }
+		    }
+
+		    const clientId = getClientId();
+
+		    let sessions = [];
+		    let activeId = null;
+		    let counter = 1;
+
+    // 加载现有会话
+	    async function loadExistingSessions() {
+	      try {
+	        const response = await fetch(
+	          `/api/sessions?clientId=${encodeURIComponent(clientId)}&token=${encodeURIComponent(authToken)}`
+	        );
+	        if (response.ok) {
+	          const data = await response.json();
+	          return data.sessions;
+	        }
+      } catch (error) {
+        console.error('加载会话失败:', error);
+      }
+      return [];
+    }
+
+    async function loadDir(p) {
+      const res = await fetch(`/api/fs?path=${encodeURIComponent(p)}&token=${encodeURIComponent(authToken)}`);
+      if (res.status === 401) {
+        console.log('❌ 文件系统访问需要重新认证');
+        showToast('🔐 登录已过期，请重新登录');
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 2000);
+        return;
+      }
+      const data = await res.json();
+      document.getElementById('path').value = data.cwd;
+      const list = document.getElementById('list');
+      list.innerHTML = '';
+      // add parent shortcut if not root
+      if (data.cwd !== data.root) {
+        const parent = document.createElement('div');
+        parent.textContent = '⬆️ ..';
+        parent.className = 'item';
+        parent.onclick = () => {
+          const up = data.cwd.split('/').slice(0,-1).join('/') || '/';
+          loadDir(up);
+        };
+        list.appendChild(parent);
+      }
+      data.items.forEach(it => {
+        const div = document.createElement('div');
+        div.className = 'item';
+        
+        const icon = document.createElement('span');
+        icon.textContent = it.isDir ? '📁' : (it.isExe ? '⚡' : '📄');
+        div.appendChild(icon);
+        
+        const name = document.createElement('span');
+        name.className = 'file-name';
+        name.textContent = it.name;
+        div.appendChild(name);
+        
+        const tag = document.createElement('span');
+        tag.className = 'file-tag';
+        tag.textContent = it.isDir ? 'dir' : (it.isExe ? 'exec' : `${it.size}B`);
+        div.appendChild(tag);
+        
+        div.onclick = () => {
+          if (it.isDir) {
+            const next = join(data.cwd, it.name);
+            loadDir(next);
+          } else if (it.isExe) {
+            const confirmed = confirm(`在 ${data.cwd} 运行 ./${it.name} ?`);
+            if (confirmed) createTerminal(data.cwd, `./${it.name}`);
+          }
+        };
+        list.appendChild(div);
+      });
+    }
+
+    function join(base, name){
+      if (base === '/') return `/${name}`;
+      return base.replace(/\/$/, '') + '/' + name;
+    }
+
+	    // 将后端 PTY 输出做“合帧/合批”写入，避免长对话下高频 term.write 导致滚动卡顿
+	    function isTermAtBottom(term) {
+	      try {
+	        const buf = term?.buffer?.active;
+	        if (!buf) return true;
+	        const viewportY = (typeof buf.viewportY === 'number') ? buf.viewportY : buf.baseY;
+	        return viewportY === buf.baseY;
+	      } catch {
+	        return true;
+	      }
+	    }
+
+	    function scheduleTermFlush(session) {
+	      try {
+	        if (!session?.term) return;
+	        if (session._termFlushScheduled) return;
+	        session._termFlushScheduled = true;
+
+	        const active = session.id === activeId;
+	        const fast = active && isTermAtBottom(session.term) && !document.hidden;
+
+	        if (fast && typeof requestAnimationFrame === 'function') {
+	          requestAnimationFrame(() => {
+	            session._termFlushScheduled = false;
+	            flushTermWrites(session);
+	          });
+	        } else {
+	          const delay = document.hidden ? 200 : 80;
+	          session._termFlushTimer = setTimeout(() => {
+	            session._termFlushScheduled = false;
+	            flushTermWrites(session);
+	          }, delay);
+	        }
+	      } catch {}
+	    }
+
+	    function flushTermWrites(session) {
+	      try {
+	        if (!session?.term) return;
+	        if (session._termWriting) return;
+	        const data = session._pendingTermWrites;
+	        if (!data) return;
+	        session._pendingTermWrites = '';
+	        session._termWriting = true;
+	        session.term.write(data, () => {
+	          session._termWriting = false;
+	          if (session._pendingTermWrites) scheduleTermFlush(session);
+	        });
+	      } catch {
+	        // 如果 write 回调异常，确保不会卡死在 writing 状态
+	        try { session._termWriting = false; } catch {}
+	      }
+	    }
+
+		    function queueTermWrite(session, chunk) {
+		      try {
+		        if (!session?.term) return;
+		        if (!chunk) return;
+		        session._pendingTermWrites = (session._pendingTermWrites || '') + chunk;
+
+	        // 浏览器/设备性能不足时，优先加快刷新，避免待写入队列无界增长导致更卡
+	        if (!session._termWriting && session._pendingTermWrites.length > 256 * 1024) {
+	          flushTermWrites(session);
+	          return;
+	        }
+	        scheduleTermFlush(session);
+		      } catch {}
+		    }
+
+		    // 手机输入法（IME）兼容：
+		    // 某些输入法在输入智能引号等字符时，会在 composing 阶段反复“整段重发”，
+		    // 造成每输入一个字符就把之前的内容再次发送到后端（看起来像重复粘贴）。
+		    function installImeWorkaround(session) {
+		      try {
+		        if (!session?.pane || session._imeInstalled) return;
+		        const ta = session.pane.querySelector('.xterm-helper-textarea');
+		        if (!ta) return;
+
+		        session._imeInstalled = true;
+		        session._xtermTextarea = ta;
+		        session._imeComposing = false;
+		        session._imeLastData = '';
+		        session._imeDedupeUntil = 0;
+		        session._imeProblemModeUntil = 0;
+
+		        function clearTextareaSoon() {
+		          try {
+		            if (!session._xtermTextarea) return;
+		            // 不要在 composing 中强行清空，否则会打断输入法候选/联想。
+		            if (session._imeComposing) return;
+		            // 用 0ms 延迟，避免与 xterm 内部事件顺序冲突
+		            setTimeout(() => {
+		              try {
+		                if (session._imeComposing) return;
+		                session._xtermTextarea.value = '';
+		                // 某些浏览器需要显式重置 selection，避免输入法继续基于旧文本做“整段重发”
+		                if (typeof session._xtermTextarea.setSelectionRange === 'function') {
+		                  session._xtermTextarea.setSelectionRange(0, 0);
+		                }
+		              } catch {}
+		            }, 0);
+		          } catch {}
+		        }
+
+		        ta.addEventListener(
+		          'compositionstart',
+		          () => {
+		            session._imeComposing = true;
+		            session._imeLastData = '';
+		            session._imeDedupeUntil = Date.now() + 20000;
+		          },
+		          { passive: true }
+		        );
+
+		        ta.addEventListener(
+		          'compositionupdate',
+		          () => {
+		            session._imeComposing = true;
+		            session._imeDedupeUntil = Date.now() + 20000;
+		          },
+		          { passive: true }
+		        );
+
+		        ta.addEventListener(
+		          'compositionend',
+		          () => {
+		            session._imeComposing = false;
+		            session._imeLastData = '';
+		            // 有些输入法在 compositionend 后还会持续几秒“整段重发”
+		            session._imeDedupeUntil = Date.now() + 8000;
+		            // compositionend 后强制清空一次 textarea，避免后续按键基于旧值重发整段
+		            clearTextareaSoon();
+		          },
+		          { passive: true }
+		        );
+
+		        // 兜底：在“问题窗口”内，每次 input 都清空 textarea，避免输入法持续携带历史文本
+		        ta.addEventListener(
+		          'input',
+		          () => {
+		            try {
+		              if (session._imeComposing) return;
+		              if (session._imeProblemModeUntil && Date.now() < session._imeProblemModeUntil) {
+		                clearTextareaSoon();
+		              }
+		            } catch {}
+		          },
+		          { passive: true }
+		        );
+		      } catch {}
+		    }
+
+		    function createTerminal(cwd, autorunCmd=null, sessionId=null) {
+      const id = `term-${counter++}`;
+      const tabs = document.getElementById('tabs');
+      const tab = document.createElement('div');
+      tab.className = 'tab';
+      tab.textContent = sessionId ? `终端 ${sessions.length + 1} (恢复)` : `终端 ${sessions.length + 1}`;
+	      const close = document.createElement('span');
+	      close.className = 'close';
+	      close.textContent = '×';
+	      close.onclick = (e) => { e.stopPropagation(); closeTerminal(id); };
+	      tab.appendChild(close);
+      tab.onclick = () => setActive(id);
+      tabs.appendChild(tab);
+
+      const pane = document.createElement('div');
+      pane.className = 'term-pane';
+      document.getElementById('term-area').appendChild(pane);
+
+      // 计算初始终端尺寸
+      function calculateTermSize() {
+        const termArea = document.getElementById('term-area');
+        const charWidth = 7.6;
+        const lineHeight = 18;
+        const availableWidth = termArea.clientWidth - 20;
+        const availableHeight = termArea.clientHeight - 20;
+        
+        const cols = Math.floor(availableWidth / charWidth);
+        const rows = Math.floor(availableHeight / lineHeight);
+        
+        return {
+          cols: Math.max(Math.min(cols, 150), 20),
+          rows: Math.max(Math.min(rows, 50), 10)
+        };
+      }
+
+      const initialSize = calculateTermSize();
+	      const term = new Terminal({ 
+	        convertEol: true, 
+	        theme: { background: '#0f1115' },
+	        cols: initialSize.cols,
+	        rows: initialSize.rows,
+	        scrollback: 1000,
+	        cursorBlink: true,
+	        fontSize: 13,
+	        fontFamily: 'Consolas, "Courier New", monospace',
+	        allowTransparency: false,
+	        cursorStyle: 'block',
+	        // 明确使用 canvas 渲染（不支持则自动忽略），避免 DOM 渲染在长输出下更易卡顿
+	        rendererType: 'canvas'
+	      });
+	      
+	      term.open(pane);
+
+	      // 尝试启用 WebGL 渲染加速（失败则自动降级为 canvas）
+	      try {
+	        if (typeof term.loadAddon === 'function' && window.WebglAddon?.WebglAddon) {
+	          const webgl = new window.WebglAddon.WebglAddon();
+	          term.loadAddon(webgl);
+	        }
+	      } catch (e) {
+	        console.warn('WebGL 渲染加速不可用，已降级:', e);
+	      }
+
+      // 创建一个专门的resize函数
+      function resizeTerminal() {
+        const newSize = calculateTermSize();
+        if (term.cols !== newSize.cols || term.rows !== newSize.rows) {
+          term.resize(newSize.cols, newSize.rows);
+        }
+      }
+
+      // 监听容器尺寸变化
+      let resizeTimeout;
+      const resizeObserver = new ResizeObserver(() => {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(resizeTerminal, 50);
+      });
+      resizeObserver.observe(document.getElementById('term-area'));
+
+			      const session = { 
+			        id, cwd, term, pane, tab, ws: null, inputDisposable: null, 
+			        autorun: autorunCmd,
+			        resizeObserver,
+			        resizeTerminal,
+			        sessionId,
+			        lastReplyText: '',
+			        lastReplyLine: '',
+			        _replyTextBytes: 0,
+			        _capturingReply: false,
+			        _replyCarry: '',
+			        _pendingTermWrites: '',
+			        _termFlushScheduled: false,
+			        _termFlushTimer: null,
+			        _termWriting: false,
+			        _imeInstalled: false,
+			        _xtermTextarea: null,
+			        _imeComposing: false,
+			        _imeLastData: '',
+			        _imeDedupeUntil: 0,
+			        _imeProblemModeUntil: 0
+			      };
+		      sessions.push(session);
+		      // xterm 的隐藏 textarea 可能在 open 后异步出现，延迟安装 IME 监听。
+		      requestAnimationFrame(() => { try { installImeWorkaround(session); } catch {} });
+	      // Ensure the terminal has the correct size before establishing WS, otherwise xterm may wrap/reflow
+	      // the first line when a later resize happens (common on mobile/PWA during layout settle).
+	      try { resizeTerminal(); } catch {}
+	      requestAnimationFrame(() => {
+	        setTimeout(() => {
+	          try { resizeTerminal(); } catch {}
+	          connectSession(session);
+	        }, 0);
+	      });
+	      setActive(id);
+	      
+	      return session;
+	    }
+
+	    function connectSession(session) {
+      // teardown old; suppress close message when reconnecting
+      if (session.ws) {
+        session.suppressClose = true;
+        session.ws.close();
+      }
+      session.inputDisposable?.dispose();
+      
+      // 在URL中包含终端尺寸、token和会话ID
+	      const params = new URLSearchParams({
+	        cwd: session.cwd,
+	        cols: session.term.cols,
+	        rows: session.term.rows,
+	        clientId,
+	        token: authToken
+	      });
+      
+      if (session.sessionId) {
+        params.set('sessionId', session.sessionId);
+        params.set('reconnect', 'true');
+      }
+      
+      const url = `${location.origin.replace('http','ws')}/ws/pty?${params}`;
+      const ws = new WebSocket(url);
+      session.ws = ws;
+      
+				      ws.onmessage = ev => {
+				        const data = ev.data;
+
+	        // Backend may refuse reconnects to missing sessions (e.g. after server restart/cleanup).
+	        if (data.startsWith('SESSION_NOT_FOUND:')) {
+	          const missingId = data.split(':')[1];
+	          console.warn('会话不存在:', missingId);
+
+		          // Session is gone on the server; remove UI without deleting.
+		          try { removeTerminal(session.id); } catch {}
+		          if (!sessions.length) createTerminal('.');
+		          return;
+		        }
+
+	        if (data.startsWith('SESSION_FORBIDDEN:')) {
+	          const forbiddenId = data.split(':')[1];
+	          console.warn('会话无权限:', forbiddenId);
+		          try { removeTerminal(session.id); } catch {}
+		          if (!sessions.length) createTerminal('.');
+		          return;
+		        }
+        
+		        // 检查是否是会话ID消息
+		        if (data.startsWith('SESSION_ID:')) {
+		          session.sessionId = data.split(':')[1];
+		          console.log('会话ID:', session.sessionId);
+		          return;
+		        }
+		        
+				        // Normal pty output (what we consider "reply")
+				        updateLastReplyLine(session, data);
+				        appendReplyText(session, data);
+				        queueTermWrite(session, data);
+				      };
+      
+	      ws.onclose = () => {
+	        if (session.suppressClose) {
+	          session.suppressClose = false;
+	          return;
+	        }
+	        queueTermWrite(session, '\\r\\n[连接已断开 - 会话已保存，刷新页面可恢复]\\r\\n');
+	      };
+      
+	      ws.onopen = () => {
+	        session._capturingReply = true;
+	        // 请求会话ID（如果是新会话）
+	        if (!session.sessionId) {
+	          ws.send('GET_SESSION_ID');
+	        }
+
+	        // Re-assert current size right after connect (mobile layout can change after initial params).
+	        try { ws.send(`RESIZE:${session.term.cols}:${session.term.rows}`); } catch {}
+	        
+	        if (session.autorun) {
+	          setTimeout(() => {
+	            ws.send(session.autorun);
+	            ws.send('\n');
+            session.autorun = null;
+          }, 200);
+        }
+	      };
+	      
+	      session.inputDisposable = session.term.onData((d) => {
+	        if (ws?.readyState !== 1) return;
+	        try {
+	          let payload = d;
+
+	          // 兼容：把智能引号统一为 ASCII，避免某些 shell/程序解析异常
+	          if (typeof payload === 'string' && payload) {
+	            const raw = payload;
+	            payload = payload.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+	            // 禁用“成对引号自动补全”（常见于部分安卓输入法，如小米输入法）。
+	            // 这类输入法会一次性插入两个引号并试图把光标放到中间，但 xterm 的输入模型不支持该行为，
+	            // 容易触发后续按键的“整段重发/重复粘贴”。这里直接降级为只发送一个引号。
+	            if (payload === '""') payload = '"';
+	            else if (payload === "''") payload = "'";
+
+	            // 如果检测到来自输入法的“引号相关触发”（智能引号/成对补全），开启一个短暂的“问题窗口”，
+	            // 在窗口内更积极地清空 xterm textarea，防止输入法持续携带历史文本重发整段。
+	            try {
+	              const looksLikeImeQuote =
+	                (typeof raw === 'string' && /[“”‘’]/.test(raw)) || raw === '""' || raw === "''";
+	              if (looksLikeImeQuote) {
+	                session._imeProblemModeUntil = Date.now() + 15000;
+	                session._imeDedupeUntil = Math.max(session._imeDedupeUntil || 0, Date.now() + 15000);
+	              }
+	            } catch {}
+	          }
+
+	          // IME 去重（更激进的兜底）：
+	          // 一些手机输入法在输入智能引号等字符后，会在后续按键里持续发送“整段文本”，
+	          // 导致终端看起来像“每输入一个字符就把之前全部再粘贴一遍”。
+	          // 这里在 composing 期间/刚结束后一段时间内，做“最长公共前缀”增量发送。
+	          if (typeof payload === 'string' && payload.length > 1) {
+	            const now = Date.now();
+	            const inImeDedupe = !!session._imeComposing || (session._imeDedupeUntil && now < session._imeDedupeUntil);
+	            if (inImeDedupe) {
+	              const last = session._imeLastData || '';
+	              let delta = payload;
+	              if (last) {
+	                let i = 0;
+	                const max = Math.min(last.length, payload.length);
+	                while (i < max && last.charCodeAt(i) === payload.charCodeAt(i)) i++;
+	                delta = payload.slice(i);
+	              }
+	              session._imeLastData = payload;
+	              if (!delta) return;
+	              payload = delta;
+	            } else if (session._imeLastData) {
+	              session._imeLastData = '';
+	            }
+	          } else if (!session._imeComposing && session._imeLastData) {
+	            session._imeLastData = '';
+	          }
+
+	          ws.send(payload);
+
+	          // 在问题窗口内（且非 composing），每次发送后都清空 textarea，尽量阻断“整段重发”链路
+	          try {
+	            if (!session._imeComposing && session._imeProblemModeUntil && Date.now() < session._imeProblemModeUntil) {
+	              const ta = session._xtermTextarea;
+	              if (ta) {
+	                setTimeout(() => {
+	                  try {
+	                    if (session._imeComposing) return;
+	                    ta.value = '';
+	                    if (typeof ta.setSelectionRange === 'function') ta.setSelectionRange(0, 0);
+	                  } catch {}
+	                }, 0);
+	              }
+	            }
+	          } catch {}
+	        } catch {
+	          try { ws.send(d); } catch {}
+	        }
+
+	        // When user submits a command (Enter), reset reply accumulator so "copy reply"
+	        // grabs the full output from this command.
+	        if (d.includes('\r') || d.includes('\n')) {
+	          session.lastReplyText = '';
+	          session._replyTextBytes = 0;
+	          session._replyCarry = '';
+	          session.lastReplyLine = '';
+	          session._capturingReply = true;
+	        }
+	      });
+      
+      // 监听终端尺寸变化，通知后端
+      if (session.resizeListener) {
+        session.resizeListener.dispose();
+      }
+      session.resizeListener = session.term.onResize(({ cols, rows }) => {
+        if (ws?.readyState === 1) {
+          ws.send(`RESIZE:${cols}:${rows}`);
+        }
+      });
+    }
+
+	    function setActive(id) {
+	      activeId = id;
+	      sessions.forEach(s => {
+	        const active = s.id === id;
+	        s.tab.classList.toggle('active', active);
+	        s.pane.style.display = active ? 'block' : 'none';
+	      });
+
+	      // 切换到活动终端后，优先把积压输出快速刷新（避免切换后看到“卡住”）
+	      try {
+	        const s = sessions.find(s => s.id === id);
+	        if (s?._pendingTermWrites) flushTermWrites(s);
+	        if (s?._pendingTermWrites) scheduleTermFlush(s);
+	      } catch {}
+
+	    }
+
+	    function getActive() {
+	      return sessions.find(s => s.id === activeId);
+	    }
+
+		    function getLatestNonEmptyLine(term) {
+		      try {
+		        const buf = term?.buffer?.active;
+		        if (!buf) return '';
+		        const start = (buf.baseY || 0) + (buf.cursorY || 0);
+		        for (let y = start; y >= 0; y--) {
+		          const line = buf.getLine(y);
+		          if (!line) continue;
+		          const text = (line.translateToString(true) || '').replace(/\s+$/g, '');
+		          if (text.trim().length) return text;
+		        }
+		      } catch {}
+		      return '';
+		    }
+
+			    // Track "terminal reply": latest non-empty line received from backend output.
+			    function updateLastReplyLine(session, chunk) {
+		      try {
+		        if (!session) return;
+		        const carry = session._replyCarry || '';
+		        const text = (carry + (chunk || '')).replace(/\r/g, '');
+		        const parts = text.split('\n');
+		        session._replyCarry = parts.pop() || '';
+		        for (const line of parts) {
+		          const cleaned = (line || '').replace(/\s+$/g, '');
+		          if (cleaned.trim()) session.lastReplyLine = cleaned;
+		        }
+			      } catch {}
+			    }
+
+			    // Track "terminal reply": full output text for the most recent command.
+			    function appendReplyText(session, chunk) {
+			      try {
+			        if (!session?._capturingReply) return;
+			        if (!chunk) return;
+			        const text = String(chunk).replace(/\r/g, '');
+
+			        // Avoid unbounded growth (keep last ~200KB per session).
+			        const maxBytes = 200000;
+			        const newBytes = session._replyTextBytes + text.length;
+			        if (newBytes > maxBytes) {
+			          const overflow = newBytes - maxBytes;
+			          session.lastReplyText = (session.lastReplyText || '').slice(overflow);
+			          session._replyTextBytes = Math.max(0, session._replyTextBytes - overflow);
+			        }
+
+			        session.lastReplyText = (session.lastReplyText || '') + text;
+			        session._replyTextBytes += text.length;
+			      } catch {}
+			    }
+
+	    async function writeClipboard(text) {
+	      if (!text) return false;
+	      try {
+	        await navigator.clipboard.writeText(text);
+	        return true;
+	      } catch {
+	        try {
+	          const ta = document.createElement('textarea');
+	          ta.value = text;
+	          ta.style.position = 'fixed';
+	          ta.style.left = '-9999px';
+	          document.body.appendChild(ta);
+	          ta.focus();
+	          ta.select();
+	          const ok = document.execCommand('copy');
+	          ta.remove();
+	          return ok;
+	        } catch {
+	          return false;
+	        }
+	      }
+	    }
+
+		    async function readClipboard() {
+		      try {
+		        return await navigator.clipboard.readText();
+		      } catch {
+		        return '';
+		      }
+		    }
+
+		    // 统一的“粘贴到活动终端”（不自动回车），供工具栏/指令集共用
+			    function pasteTextToActiveTerminal(text, { toastOk = '✅ 已粘贴', toastEmpty = '⚠️ 内容为空' } = {}) {
+			      const s = getActive();
+			      if (!s?.ws || s.ws.readyState !== 1) {
+			        showToast('❌ 终端未连接');
+			        return false;
+		      }
+		      const normalized = String(text ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+		      if (!normalized.trim()) {
+		        showToast(toastEmpty);
+		        return false;
+		      }
+		      // bracketed paste：避免多行被逐行执行
+		      try {
+		        s.ws.send(`\x1b[200~${normalized}\x1b[201~`);
+		      } catch {
+		        showToast('❌ 粘贴失败');
+		        return false;
+		      }
+			      showToast(toastOk);
+			      return true;
+			    }
+
+			    // ========= 指令集（预设命令） =========
+			    function initCommandSets() {
+			      const page = document.getElementById('cmdset-page');
+			      const backBtn = document.getElementById('cmdsetBackBtn');
+			      const breadcrumbEl = document.getElementById('cmdsetBreadcrumb');
+			      const listEl = document.getElementById('cmdsetList');
+			      const emptyEl = document.getElementById('cmdsetEmpty');
+			      const newCmdBtn = document.getElementById('cmdsetNewCommandBtn');
+			      const newFolderBtn = document.getElementById('cmdsetNewFolderBtn');
+			      const floatingBtn = document.getElementById('cmdsetFloatingBtn');
+
+			      const modalBackdrop = document.getElementById('cmdset-modal-backdrop');
+			      const modal = document.getElementById('cmdset-modal');
+			      const modalTitle = document.getElementById('cmdsetModalTitle');
+			      const nameInput = document.getElementById('cmdsetNameInput');
+			      const contentField = document.getElementById('cmdsetContentField');
+			      const contentInput = document.getElementById('cmdsetContentInput');
+			      const autoSendField = document.getElementById('cmdsetAutoSendField');
+			      const autoSendInput = document.getElementById('cmdsetAutoSendInput');
+			      const modalCancelBtn = document.getElementById('cmdsetModalCancelBtn');
+			      const modalOkBtn = document.getElementById('cmdsetModalOkBtn');
+			      const modalCloseBtn = document.getElementById('cmdsetModalCloseBtn');
+
+			      const confirmBackdrop = document.getElementById('cmdset-confirm-backdrop');
+			      const confirmModal = document.getElementById('cmdset-confirm-modal');
+			      const confirmText = document.getElementById('cmdsetConfirmText');
+			      const confirmCancelBtn = document.getElementById('cmdsetConfirmCancelBtn');
+			      const confirmOkBtn = document.getElementById('cmdsetConfirmOkBtn');
+			      const confirmCloseBtn = document.getElementById('cmdsetConfirmCloseBtn');
+
+			      if (!page || !backBtn || !breadcrumbEl || !listEl || !emptyEl || !newCmdBtn || !newFolderBtn || !floatingBtn) return;
+				      const modalDeleteBtn = document.getElementById('cmdsetModalDeleteBtn');
+				      if (!modalBackdrop || !modal || !modalTitle || !nameInput || !contentField || !contentInput || !autoSendField || !autoSendInput || !modalCancelBtn || !modalOkBtn || !modalCloseBtn || !modalDeleteBtn) return;
+			      if (!confirmBackdrop || !confirmModal || !confirmText || !confirmCancelBtn || !confirmOkBtn || !confirmCloseBtn) return;
+
+			      const state = {
+			        root: null,
+			        path: ['root'], // id 栈
+			        modalMode: 'command', // 'command' | 'folder'
+			        pendingDelete: null, // node id
+			        loading: false,
+			      };
+
+			      const genId = () => `c_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+
+			      function findNodeById(id, node) {
+			        if (!node) return null;
+			        if (node.id === id) return node;
+			        if (node.type === 'folder' && Array.isArray(node.children)) {
+			          for (const ch of node.children) {
+			            const r = findNodeById(id, ch);
+			            if (r) return r;
+			          }
+			        }
+			        return null;
+			      }
+
+			      function getCurrentFolder() {
+			        let node = state.root;
+			        for (let i = 1; i < state.path.length; i++) {
+			          const id = state.path[i];
+			          node = node?.children?.find((c) => c.id === id);
+			        }
+			        if (!node || node.type !== 'folder') return state.root;
+			        return node;
+			      }
+
+			      function updateBreadcrumb() {
+			        const names = [];
+			        let node = state.root;
+			        names.push('根目录');
+			        for (let i = 1; i < state.path.length; i++) {
+			          const id = state.path[i];
+			          node = node?.children?.find((c) => c.id === id);
+			          if (node) names.push(node.name);
+			        }
+			        breadcrumbEl.textContent = names.join(' / ');
+			      }
+
+			      function renderList() {
+			        const folder = getCurrentFolder();
+			        if (!folder) return;
+			        const items = (folder.children || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'));
+			        listEl.innerHTML = '';
+			        if (!items.length) {
+			          emptyEl.style.display = 'block';
+			          return;
+			        }
+			        emptyEl.style.display = 'none';
+			        for (const item of items) {
+			          const row = document.createElement('div');
+			          row.className = 'cmdset-item';
+			          const ico = document.createElement('div');
+			          ico.className = 'ico';
+			          ico.textContent = item.type === 'folder' ? '📂' : '▶️';
+			          const name = document.createElement('div');
+			          name.className = 'name';
+		          name.textContent = item.name;
+			          const meta = document.createElement('div');
+			          meta.className = 'meta';
+			          if (item.type === 'folder') {
+			            meta.textContent = '文件夹';
+			          } else {
+			            const preview = (item.content || '').slice(0, 60);
+			            meta.textContent = (item.autoSend ? '自动发送 · ' : '') + preview;
+			          }
+			        const del = document.createElement('button');
+			        del.className = 'cmdset-edit';
+			        del.textContent = '编辑';
+
+			          row.appendChild(ico);
+			          row.appendChild(name);
+			          row.appendChild(meta);
+			          row.appendChild(del);
+
+			          row.onclick = (e) => {
+			            e.preventDefault();
+			            e.stopPropagation();
+			            if (item.type === 'folder') {
+			              state.path.push(item.id);
+			              updateBreadcrumb();
+			              renderList();
+			              return;
+			            }
+			            const ok = pasteTextToActiveTerminal(item.content, { toastOk: item.autoSend ? '✅ 已发送指令' : '✅ 已粘贴指令', toastEmpty: '⚠️ 指令为空' });
+			            if (ok && item.autoSend) {
+			              try {
+			                const s = getActive();
+			                setTimeout(() => { try { s?.ws?.send('\r'); } catch {} }, 20);
+			              } catch {}
+			            }
+			            if (ok) closeCommandSetsPage();
+			          };
+
+			          del.onclick = (e) => {
+			            e.preventDefault();
+			            e.stopPropagation();
+			            openEditModal(item);
+			          };
+
+			          listEl.appendChild(row);
+			        }
+			      }
+
+			      function openPage() {
+			        page.classList.add('open');
+			        page.setAttribute('aria-hidden', 'false');
+			        try { listEl.scrollTop = 0; } catch {}
+			      }
+			      function closeCommandSetsPage() {
+			        page.classList.remove('open');
+			        page.setAttribute('aria-hidden', 'true');
+			      }
+
+			      async function loadCommandSets() {
+			        state.loading = true;
+			        try {
+			          const res = await fetch('/api/command-sets');
+			          const data = await res.json();
+			          if (data && data.root) state.root = data.root;
+			        } catch (e) {
+			          console.error('加载指令集失败', e);
+			          state.root = { id: 'root', type: 'folder', name: 'root', children: [] };
+			        } finally {
+			          state.loading = false;
+			          if (!state.root) state.root = { id: 'root', type: 'folder', name: 'root', children: [] };
+			          state.path = [state.root.id || 'root'];
+			        }
+			      }
+
+			      async function saveCommandSets() {
+			        if (!state.root) return;
+			        try {
+			          await fetch('/api/command-sets', {
+			            method: 'PUT',
+			            headers: { 'Content-Type': 'application/json' },
+			            body: JSON.stringify({ root: state.root }),
+			          });
+			        } catch (e) {
+			          console.error('保存指令集失败', e);
+			          showToast('⚠️ 保存失败');
+			        }
+			      }
+
+				      function openCreateModal(mode, editingItem = null) {
+				        state.modalMode = mode;
+				        state.editingNode = editingItem || null;
+				        modalTitle.textContent = editingItem
+				          ? (mode === 'folder' ? '编辑文件夹' : '编辑指令')
+				          : (mode === 'folder' ? '新建文件夹' : '新建指令');
+				        const isFolder = mode === 'folder';
+				        contentField.style.display = isFolder ? 'none' : 'block';
+				        autoSendField.style.display = isFolder ? 'none' : 'block';
+
+				        if (editingItem) {
+				          nameInput.value = editingItem.name || '';
+				          if (!isFolder) {
+				            contentInput.value = editingItem.content || '';
+				            autoSendInput.checked = Boolean(editingItem.autoSend);
+				          } else {
+				            contentInput.value = '';
+				            autoSendInput.checked = false;
+				          }
+				          modalDeleteBtn.style.display = 'inline-flex';
+				        } else {
+				          nameInput.value = '';
+				          contentInput.value = '';
+				          autoSendInput.checked = false;
+				          modalDeleteBtn.style.display = 'none';
+				        }
+
+				        modalBackdrop.classList.add('open');
+				        modal.classList.add('open');
+				        modal.setAttribute('aria-hidden', 'false');
+				        setTimeout(() => { try { nameInput.focus(); } catch {} }, 0);
+				      }
+
+				      function closeCreateModal() {
+				        modalBackdrop.classList.remove('open');
+				        modal.classList.remove('open');
+				        modal.setAttribute('aria-hidden', 'true');
+				        state.editingNode = null;
+				        modalDeleteBtn.onclick = null;
+				      }
+
+			      function openDeleteConfirm(item) {
+			        state.pendingDelete = item;
+			        confirmText.textContent = item.type === 'folder'
+			          ? `确认删除文件夹“${item.name}”及其中所有指令？`
+			          : `确认删除指令“${item.name}”？`;
+			        confirmBackdrop.classList.add('open');
+			        confirmModal.classList.add('open');
+			        confirmModal.setAttribute('aria-hidden', 'false');
+			      }
+
+			      function closeDeleteConfirm() {
+			        state.pendingDelete = null;
+			        confirmBackdrop.classList.remove('open');
+			        confirmModal.classList.remove('open');
+			        confirmModal.setAttribute('aria-hidden', 'true');
+			      }
+
+			      function removeNodeById(targetId, node) {
+			        if (!node || node.type !== 'folder' || !Array.isArray(node.children)) return false;
+			        const idx = node.children.findIndex((c) => c.id === targetId);
+			        if (idx !== -1) {
+			          node.children.splice(idx, 1);
+			          return true;
+			        }
+			        for (const ch of node.children) {
+			          if (ch.type === 'folder' && removeNodeById(targetId, ch)) return true;
+			        }
+			        return false;
+			      }
+
+			      async function ensureLoadedThen(fn) {
+			        if (!state.root) await loadCommandSets();
+			        fn();
+			      }
+
+				      async function handleCreateOk() {
+				        const name = nameInput.value.trim();
+				        const content = contentInput.value;
+				        if (!name) {
+				          showToast('⚠️ 名称不能为空');
+				          return;
+				        }
+				        const folder = getCurrentFolder();
+				        if (!folder || folder.type !== 'folder') return;
+				        if (state.editingNode) {
+				          state.editingNode.name = name;
+				          if (state.editingNode.type === 'command') {
+				            state.editingNode.content = content || '';
+				            state.editingNode.autoSend = Boolean(autoSendInput.checked);
+				          }
+				        } else {
+				          const node = state.modalMode === 'folder'
+				            ? { id: genId(), type: 'folder', name, children: [] }
+				            : { id: genId(), type: 'command', name, content: content || '', autoSend: Boolean(autoSendInput.checked) };
+				          folder.children = folder.children || [];
+				          folder.children.push(node);
+				        }
+				        await saveCommandSets();
+				        closeCreateModal();
+				        renderList();
+				      }
+
+			      async function handleDeleteOk() {
+			        if (!state.pendingDelete) return;
+			        removeNodeById(state.pendingDelete.id, state.root);
+			        // 删除时如果当前路径已被删掉，退回上一级
+			        const existsPath = (ids) => {
+			          let n = state.root;
+			          for (let i = 1; i < ids.length; i++) {
+			            const id = ids[i];
+			            n = n?.children?.find((c) => c.id === id);
+			            if (!n) return false;
+			          }
+			          return true;
+			        };
+			        if (!existsPath(state.path)) {
+			          state.path = [state.root?.id || 'root'];
+			        }
+			        await saveCommandSets();
+			        closeDeleteConfirm();
+			        updateBreadcrumb();
+			        renderList();
+			      }
+
+				      function openCommandSetsPage() {
+				        ensureLoadedThen(() => {
+				          updateBreadcrumb();
+				          renderList();
+				          openPage();
+				        });
+				      }
+
+				      function handleBack() {
+				        if (state.path.length > 1) {
+				          state.path.pop();
+				          updateBreadcrumb();
+				          renderList();
+				        } else {
+				          closeCommandSetsPage();
+				        }
+				      }
+
+				      function openEditModal(item) {
+				        openCreateModal(item.type, item);
+				        modalDeleteBtn.onclick = (e) => {
+				          e.preventDefault(); e.stopPropagation();
+				          state.pendingDelete = item;
+				          closeCreateModal();
+				          openDeleteConfirm(item);
+				        };
+				      }
+
+				      // 事件绑定
+				      floatingBtn.onclick = () => openCommandSetsPage();
+				      newCmdBtn.onclick = () => openCreateModal('command', null);
+				      newFolderBtn.onclick = () => openCreateModal('folder', null);
+			      modalCancelBtn.onclick = closeCreateModal;
+			      modalCloseBtn.onclick = closeCreateModal;
+			      modalOkBtn.onclick = handleCreateOk;
+			      backBtn.onclick = handleBack;
+
+			      confirmCancelBtn.onclick = closeDeleteConfirm;
+			      confirmCloseBtn.onclick = closeDeleteConfirm;
+			      confirmOkBtn.onclick = handleDeleteOk;
+
+			      // 暴露到全局
+			      window.openCommandSetsPage = openCommandSetsPage;
+			    }
+
+			    function stripTerminalControl(text) {
+			      try {
+			        let s = String(text ?? '');
+			        if (!s) return '';
+
+			        // Some environments/loggers render ESC as the visible two-character sequence "^["
+			        // (caret notation). If copied, it shows up as "^[[...". Strip those too.
+			        // CSI: ^[[ ... command
+			        s = s.replace(/\^\[\[[0-?]*[ -/]*[@-~]/g, '');
+			        // OSC: ^[] ... ^[\
+			        s = s.replace(/\^\[\][\s\S]*?\^\[\\/g, '');
+			        // DCS/PM/APC: ^[P / ^[^ / ^[_ ... ^[\
+			        s = s.replace(/\^\[[P^_][\s\S]*?\^\[\\/g, '');
+			        // Single-character caret-notation ESC sequences
+			        s = s.replace(/\^\[[@-Z\\-_]/g, '');
+
+			        // OSC: ESC ] ... BEL or ESC \
+			        s = s.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '');
+			        // DCS/PM/APC: ESC P / ESC ^ / ESC _ ... ESC \
+			        s = s.replace(/\x1b[P^_][\s\S]*?\x1b\\/g, '');
+			        // CSI: ESC [ ... command
+		        s = s.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
+		        // Single-character ESC sequences
+		        s = s.replace(/\x1b[@-Z\\-_]/g, '');
+
+		        // Control chars (keep \n and \t)
+		        s = s.replace(/[\x00-\x08\x0B-\x1A\x1C-\x1F\x7F]/g, '');
+		        // C1 controls
+		        s = s.replace(/[\x80-\x9F]/g, '');
+
+		        return s;
+		      } catch {
+		        return '';
+		      }
+		    }
+
+				    function initSideActions() {
+				      const toggleBtn = document.getElementById('drawerToggleBtn');
+				      const floatingCmdBtn = document.getElementById('cmdsetFloatingBtn');
+				      const drawer = document.getElementById('right-drawer');
+				      const backdrop = document.getElementById('drawer-backdrop');
+				      const closeBtn = document.getElementById('drawerCloseBtn');
+
+				      const copyBtn = document.getElementById('copyLatestBtn');
+				      const pasteBtn = document.getElementById('pasteClipboardBtn');
+				      const ctrlToggleBtn = document.getElementById('ctrlToggleBtn');
+				      const altToggleBtn = document.getElementById('altToggleBtn');
+				      const comboBtn = document.getElementById('comboFloatingBtn');
+				      const upBtn = document.getElementById('upBtn');
+				      const downBtn = document.getElementById('downBtn');
+				      const tabBtn = document.getElementById('tabBtn');
+				      const enterBtn = document.getElementById('enterBtn');
+				      const continueBtn = document.getElementById('continueBtn');
+				      const escBtn = document.getElementById('escBtn');
+				      const ctrlCBtn = document.getElementById('ctrlCBtn');
+
+			      const pasteModalBackdrop = document.getElementById('paste-modal-backdrop');
+			      const pasteModal = document.getElementById('paste-modal');
+			      const pasteModalCloseBtn = document.getElementById('pasteModalCloseBtn');
+			      const pasteModalCancelBtn = document.getElementById('pasteModalCancelBtn');
+				      const pasteModalOkBtn = document.getElementById('pasteModalOkBtn');
+				      const pasteInput = document.getElementById('paste-input');
+
+				      if (!toggleBtn || !floatingCmdBtn || !drawer || !backdrop || !closeBtn) return;
+					      if (!copyBtn || !pasteBtn || !comboBtn || !upBtn || !downBtn || !tabBtn || !enterBtn || !continueBtn || !escBtn || !ctrlCBtn) return;
+					      if (!pasteModalBackdrop || !pasteModal || !pasteModalCloseBtn || !pasteModalCancelBtn || !pasteModalOkBtn || !pasteInput) return;
+
+			      function openDrawer() {
+			        try {
+			          const w = drawer.getBoundingClientRect().width || drawer.offsetWidth || 0;
+			          document.documentElement.style.setProperty('--drawer-w', `${w}px`);
+			        } catch {}
+			        drawer.classList.add('open');
+			        backdrop.classList.add('open');
+			        drawer.setAttribute('aria-hidden', 'false');
+			        toggleBtn.parentElement?.classList?.add('open');
+			      }
+		      function closeDrawer() {
+		        drawer.classList.remove('open');
+		        backdrop.classList.remove('open');
+		        drawer.setAttribute('aria-hidden', 'true');
+		        toggleBtn.parentElement?.classList?.remove('open');
+		      }
+		      function toggleDrawer() {
+		        if (drawer.classList.contains('open')) closeDrawer();
+		        else openDrawer();
+		      }
+
+			      toggleBtn.onclick = (e) => {
+			        e.preventDefault();
+			        e.stopPropagation();
+			        toggleDrawer();
+			      };
+			      floatingCmdBtn.onclick = (e) => {
+			        e.preventDefault();
+			        e.stopPropagation();
+			        try { openCommandSetsPage(); } catch {}
+			      };
+		      closeBtn.onclick = (e) => {
+		        e.preventDefault();
+		        e.stopPropagation();
+		        closeDrawer();
+		      };
+		      backdrop.onclick = closeDrawer;
+
+		      // Keep the toggle button aligned with drawer width
+		      window.addEventListener('resize', () => {
+		        if (!drawer.classList.contains('open')) return;
+		        try {
+		          const w = drawer.getBoundingClientRect().width || drawer.offsetWidth || 0;
+		          document.documentElement.style.setProperty('--drawer-w', `${w}px`);
+		        } catch {}
+		      });
+
+		      async function copyLastOutput() {
+		        const s = getActive();
+		        if (!s?.term) {
+		          showToast('❌ 没有活动的终端会话');
+		          return;
+		        }
+		        const latest =
+		          (s.lastReplyText && s.lastReplyText.trim())
+		            ? s.lastReplyText.trimEnd()
+		            : ((s.lastReplyLine && s.lastReplyLine.trim()) ? s.lastReplyLine : getLatestNonEmptyLine(s.term));
+		        const cleaned = stripTerminalControl(latest).trimEnd();
+		        if (!cleaned) {
+		          showToast('⚠️ 没有可复制的内容');
+		          return;
+		        }
+		        const ok = await writeClipboard(cleaned);
+		        showToast(ok ? '✅ 已复制最后一次输出' : '❌ 复制失败（请允许剪贴板权限）');
+		      }
+
+				      async function pasteClipboard() {
+				        const text = await readClipboard();
+				        if (!text) {
+				          showToast('⚠️ 剪贴板为空或无权限');
+				          return;
+				        }
+				        pasteTextToActiveTerminal(text);
+				      }
+
+			      function openPasteModal() {
+			        try {
+			          pasteInput.value = '';
+			          pasteModalBackdrop.classList.add('open');
+			          pasteModal.classList.add('open');
+			          pasteModalBackdrop.setAttribute('aria-hidden', 'false');
+			          pasteModal.setAttribute('aria-hidden', 'false');
+			          setTimeout(() => { try { pasteInput.focus(); } catch {} }, 0);
+			        } catch {}
+			      }
+
+			      function closePasteModal() {
+			        try {
+			          pasteModalBackdrop.classList.remove('open');
+			          pasteModal.classList.remove('open');
+			          pasteModalBackdrop.setAttribute('aria-hidden', 'true');
+			          pasteModal.setAttribute('aria-hidden', 'true');
+			        } catch {}
+			      }
+
+				      function sendPasteText(text) {
+				        return pasteTextToActiveTerminal(text);
+				      }
+
+			      function sendToTerminal(data, okMsg) {
+			        const s = getActive();
+			        if (!s?.ws || s.ws.readyState !== 1) {
+			          showToast('❌ 终端未连接');
+			          return;
+			        }
+			        s.ws.send(data);
+			        showToast(okMsg);
+			      }
+
+			      // Ctrl / Alt 组合键一次性开关
+			      let pendingCtrl = false;
+			      let pendingAlt = false;
+			      let pendingShift = false;
+
+			      function resetModifiers() {
+			        pendingCtrl = false;
+			        pendingAlt = false;
+			        pendingShift = false;
+			        // 移除旧的工具栏状态（已删除）
+			        try { document.getElementById('comboCtrlBtn')?.classList?.remove('active'); } catch {}
+			        try { document.getElementById('comboAltBtn')?.classList?.remove('active'); } catch {}
+			        try { document.getElementById('comboShiftBtn')?.classList?.remove('active'); } catch {}
+			      }
+
+			      function sendCtrlCombo(ch) {
+			        const key = String(ch || '').toUpperCase();
+			        if (!key || key.length !== 1) return false;
+			        const code = key.charCodeAt(0);
+			        // A-Z -> ctrl: code & 0x1f
+			        if (code < 64 || code > 90) return false;
+			        const ctrlChar = String.fromCharCode(code & 0x1f);
+			        const s = getActive();
+			        if (!s?.ws || s.ws.readyState !== 1) {
+			          showToast('❌ 终端未连接');
+			          return false;
+			        }
+			        // Alt 同时按下：ESC 前缀
+			        const payload = pendingAlt ? `\x1b${ctrlChar}` : ctrlChar;
+			        s.ws.send(payload);
+			        showToast(pendingAlt ? `✅ 发送 Alt+Ctrl+${key}` : `✅ 发送 Ctrl+${key}`);
+			        resetModifiers();
+			        return true;
+			      }
+
+			      function sendAltCombo(ch) {
+			        const key = String(ch || '');
+			        if (!key || key.length !== 1) return false;
+			        const s = getActive();
+			        if (!s?.ws || s.ws.readyState !== 1) {
+			          showToast('❌ 终端未连接');
+			          return false;
+			        }
+			        s.ws.send(`\x1b${key}`);
+			        showToast(`✅ 发送 Alt+${key}`);
+			        resetModifiers();
+			        return true;
+			      }
+
+			      function handleModifierKeydown(e) {
+			        // 弹出式组合键模式下不拦截输入框的按键
+			        if (comboModal?.classList?.contains('open')) return;
+			        if (!pendingCtrl && !pendingAlt) return;
+			        // 忽略功能键
+			        if (e.key && e.key.length === 1) {
+			          e.preventDefault();
+			          e.stopPropagation();
+			          const k = e.key;
+			          if (pendingCtrl) {
+			            const ok = sendCtrlCombo(k);
+			            if (!ok && pendingAlt) sendAltCombo(k); // 回退为 alt+key
+			            else if (!ok) resetModifiers();
+			          } else if (pendingAlt) {
+			            sendAltCombo(k);
+			          }
+			        }
+			        // 任何按键都清理状态，避免卡住
+			        resetModifiers();
+			      }
+
+		      copyBtn.onclick = async (e) => {
+		        e.preventDefault();
+		        e.stopPropagation();
+		        await copyLastOutput();
+		      };
+			      pasteBtn.onclick = async (e) => {
+			        e.preventDefault();
+			        e.stopPropagation();
+			        if (pasteBtn.__suppressClickOnce) {
+			          pasteBtn.__suppressClickOnce = false;
+			          return;
+			        }
+			        await pasteClipboard();
+			      };
+			      // 组合键弹窗逻辑
+			      const comboBackdrop = document.getElementById('combo-modal-backdrop');
+			      const comboModal = document.getElementById('combo-modal');
+			      const comboCtrlBtn = document.getElementById('comboCtrlBtn');
+			      const comboAltBtn = document.getElementById('comboAltBtn');
+			      const comboShiftBtn = document.getElementById('comboShiftBtn');
+			      const comboInput = document.getElementById('combo-input');
+			      const comboCloseBtn = document.getElementById('comboModalCloseBtn');
+			      const comboCancelBtn = document.getElementById('comboModalCancelBtn');
+			      const comboOkBtn = document.getElementById('comboModalOkBtn');
+
+			      function toggleCombo(btn, flagKey) {
+			        btn.classList.toggle('active');
+			        if (flagKey === 'ctrl') pendingCtrl = btn.classList.contains('active');
+			        if (flagKey === 'alt') pendingAlt = btn.classList.contains('active');
+			        if (flagKey === 'shift') pendingShift = btn.classList.contains('active');
+			      }
+
+			      function openComboModal() {
+			        comboBackdrop.classList.add('open');
+			        comboModal.classList.add('open');
+			        comboBackdrop.setAttribute('aria-hidden', 'false');
+			        comboModal.setAttribute('aria-hidden', 'false');
+			        setTimeout(() => { try { comboInput.focus(); } catch {} }, 0);
+			      }
+			      function closeComboModal() {
+			        comboBackdrop.classList.remove('open');
+			        comboModal.classList.remove('open');
+			        comboBackdrop.setAttribute('aria-hidden', 'true');
+			        comboModal.setAttribute('aria-hidden', 'true');
+			        resetModifiers();
+			        comboInput.value = '';
+			      }
+
+			      function buildComboPayload(text) {
+			        const chars = String(text || '').split('');
+			        if (!chars.length) {
+			          showToast('⚠️ 请输入要发送的字符');
+			          return null;
+			        }
+			        let payload = '';
+			        for (const ch of chars) {
+			          let c = ch;
+			          const upper = c.toUpperCase();
+			          if (pendingCtrl) {
+			            const code = upper.charCodeAt(0);
+			            if (code >= 64 && code <= 95) {
+			              c = String.fromCharCode(code & 0x1f);
+			            }
+			          } else if (pendingShift) {
+			            c = upper;
+			          }
+			          if (pendingAlt) {
+			            payload += `\x1b${c}`;
+			          } else {
+			            payload += c;
+			          }
+			        }
+			        return payload;
+			      }
+
+			      function sendComboFromModal() {
+			        const payload = buildComboPayload(comboInput.value);
+			        if (!payload) return;
+			        try {
+			          const s = getActive();
+			          s.ws.send(payload);
+			          const mods = [
+			            pendingCtrl ? 'Ctrl' : null,
+			            pendingAlt ? 'Alt' : null,
+			            pendingShift ? 'Shift' : null,
+			          ].filter(Boolean).join('+');
+			          showToast(`✅ 已发送 ${mods ? mods + '+' : ''}${comboInput.value}`);
+			        } catch {
+			          showToast('❌ 发送失败');
+			        }
+			        closeComboModal();
+			      }
+
+			      comboBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openComboModal(); };
+			      comboCloseBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); closeComboModal(); };
+			      comboCancelBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); closeComboModal(); };
+			      comboOkBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); sendComboFromModal(); };
+			      comboCtrlBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); toggleCombo(comboCtrlBtn, 'ctrl'); };
+			      comboAltBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); toggleCombo(comboAltBtn, 'alt'); };
+			      comboShiftBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); toggleCombo(comboShiftBtn, 'shift'); };
+
+			      comboInput.addEventListener('keydown', (e) => {
+			        if (e.key === 'Escape') {
+			          e.preventDefault(); closeComboModal(); return;
+			        }
+			        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+			          e.preventDefault();
+			          sendComboFromModal();
+			        }
+			      });
+			      upBtn.onclick = (e) => {
+			        e.preventDefault();
+			        e.stopPropagation();
+			        sendToTerminal('\x1b[A', '✅ UP');
+			      };
+				      downBtn.onclick = (e) => {
+				        e.preventDefault();
+				        e.stopPropagation();
+				        sendToTerminal('\x1b[B', '✅ DOWN');
+				      };
+				      tabBtn.onclick = (e) => {
+				        e.preventDefault();
+				        e.stopPropagation();
+				        sendToTerminal('\t', '✅ TAB');
+				      };
+				      enterBtn.onclick = (e) => {
+				        e.preventDefault();
+				        e.stopPropagation();
+				        sendToTerminal('\r', '✅ ENTER');
+				      };
+			      escBtn.onclick = (e) => {
+			        e.preventDefault();
+			        e.stopPropagation();
+			        sendToTerminal('\x1b', '✅ 已发送 ESC');
+			      };
+			      ctrlCBtn.onclick = (e) => {
+			        e.preventDefault();
+			        e.stopPropagation();
+			        sendToTerminal('\x03', '✅ 已发送 Ctrl+C');
+			      };
+
+			      continueBtn.onclick = (e) => {
+			        e.preventDefault();
+			        e.stopPropagation();
+			        const s = getActive();
+			        if (!s?.ws || s.ws.readyState !== 1) {
+		          showToast('❌ 终端未连接');
+		          return;
+		        }
+		        // Macro: ESC -> "continue" -> Enter
+		        // IMPORTANT: avoid sending ESC immediately followed by "c" (ESC c == RIS reset in many terminals),
+		        // which can swallow the "c" and make it look like "ontinue".
+		        s.ws.send('\x1b');
+		        setTimeout(() => {
+		          try { s.ws.send('continue'); } catch {}
+		          setTimeout(() => {
+		            try { s.ws.send('\r'); } catch {}
+		          }, 30);
+		        }, 80);
+			        showToast('✅ CONT');
+			      };
+
+			      // 捕获阶段优先截获，防止按键先被 xterm 吃掉（尤其移动端）
+			      document.addEventListener('keydown', (e) => {
+			        if (e.key === 'Escape' && drawer.classList.contains('open')) {
+			          closeDrawer();
+			          return;
+			        }
+			        handleModifierKeydown(e);
+			      }, true);
+
+			      // Long-press PASTE to open input modal (mobile-friendly).
+			      {
+			        let timer = null;
+			        const longPressMs = 520;
+			        const start = (e) => {
+			          try {
+			            if (timer) clearTimeout(timer);
+			            timer = setTimeout(() => {
+			              pasteBtn.__suppressClickOnce = true;
+			              openPasteModal();
+			            }, longPressMs);
+			          } catch {}
+			        };
+			        const cancel = () => {
+			          if (timer) clearTimeout(timer);
+			          timer = null;
+			        };
+			        pasteBtn.addEventListener('pointerdown', start);
+			        pasteBtn.addEventListener('pointerup', cancel);
+			        pasteBtn.addEventListener('pointercancel', cancel);
+			        pasteBtn.addEventListener('pointerleave', cancel);
+			      }
+
+			      pasteModalBackdrop.onclick = closePasteModal;
+			      pasteModalCloseBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); closePasteModal(); };
+			      pasteModalCancelBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); closePasteModal(); };
+			      pasteModalOkBtn.onclick = (e) => {
+			        e.preventDefault();
+			        e.stopPropagation();
+			        const ok = sendPasteText(pasteInput.value);
+			        if (ok) closePasteModal();
+			      };
+			      pasteInput.addEventListener('keydown', (e) => {
+			        if (e.key === 'Escape') {
+			          e.preventDefault();
+			          closePasteModal();
+			          return;
+			        }
+			        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+			          e.preventDefault();
+			          const ok = sendPasteText(pasteInput.value);
+			          if (ok) closePasteModal();
+			        }
+			      });
+			    }
+
+				    function removeTerminal(id) {
+		      const idx = sessions.findIndex(s => s.id === id);
+		      if (idx === -1) return;
+		      const s = sessions[idx];
+		      if (s.ws) { s.suppressClose = true; s.ws.close(); }
+		      s.inputDisposable?.dispose();
+		      s.resizeListener?.dispose();
+		      s.resizeObserver?.disconnect();
+		      try { if (s._termFlushTimer) clearTimeout(s._termFlushTimer); } catch {}
+	      s.term.dispose();
+	      s.pane.remove();
+	      s.tab.remove();
+	      sessions.splice(idx,1);
+		      if (activeId === id) {
+		        if (sessions.length) setActive(sessions[0].id);
+		        else activeId = null;
+		      }
+		    }
+
+	    // Close terminal: delete the unique session id so it won't be restored.
+		    function closeTerminal(id) {
+		      const s = sessions.find(s => s.id === id);
+		      if (!s) return;
+
+		      if (s.sessionId) {
+		        fetch(
+		          `/api/sessions/${encodeURIComponent(s.sessionId)}?clientId=${encodeURIComponent(clientId)}&token=${encodeURIComponent(authToken)}`,
+		          { method: 'DELETE' }
+		        ).catch(() => {});
+		      }
+
+		      removeTerminal(id);
+		    }
+
+    document.getElementById('load').onclick = () => {
+      const p = document.getElementById('path').value;
+      loadDir(p);
+    };
+    document.getElementById('newTerm').onclick = () => {
+      const p = document.getElementById('path').value;
+      createTerminal(p);
+    };
+
+    // 初始化：尝试恢复现有会话或创建新会话
+	    async function initializeTerminals() {
+	      const existingSessions = await loadExistingSessions();
+
+	      if (existingSessions.length > 0) {
+	        // Restore ALL sessions that still exist on the server for this clientId.
+	        const sorted = existingSessions
+	          .slice()
+	          .sort((a, b) => new Date(a.created || 0) - new Date(b.created || 0))
+	          .slice(-50); // safety cap
+
+	        console.log('恢复现有会话数量:', sorted.length);
+	        const restored = sorted.map(s => createTerminal(s?.cwd || '.', null, s.id));
+
+	        // Focus the most recently active session (fallback: first).
+	        const focusId =
+	          sorted
+	            .slice()
+	            .sort((a, b) => new Date(b.lastActivity || 0) - new Date(a.lastActivity || 0))[0]?.id || restored[0]?.id;
+	        if (focusId) setActive(focusId);
+	        return;
+	      }
+
+	      // No existing sessions: create a new one.
+	      console.log('创建新终端会话');
+	      const created = createTerminal('.');
+	      setActive(created.id);
+	    }
+
+	    let hasInitialized = false;
+	    function initializeOnce() {
+      if (hasInitialized) return;
+      hasInitialized = true;
+
+      console.log('开始初始化...');
+
+      // 检测Edge并应用专用样式
+      if (/Edg/i.test(navigator.userAgent)) {
+        console.log('检测到Edge浏览器');
+        applyEdgePWAStyles();
+      }
+
+      // 应用PWA样式
+      applyPWAStyles();
+
+      // 强制移动端全屏
+      forceMobileFullscreen();
+
+      // 如果是PWA模式，隐藏地址栏
+      if (isPWA()) {
+        console.log('PWA模式已激活');
+        hideAddressBar();
+      }
+
+	      // 启动单设备token管理
+	      if (authToken) {
+	        startSingleDeviceTokenManagement();
+	        console.log('✅ 单设备Token管理已启动');
+	      }
+
+	      // 初始化指令集页面
+	      initCommandSets();
+
+		      initSideActions();
+		      loadDir('.');
+		      initializeTerminals();
+		    }
+
+    // 页面初始化（确保只执行一次，避免重复创建终端会话）
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('DOMContentLoaded');
+      initializeOnce();
+    });
+
+    if (document.readyState !== 'loading') {
+      console.log('DOM已就绪（readyState）');
+      initializeOnce();
+    }
+
+    // 单设备Token管理功能 - 严格模式
+    let activityRefreshInterval;
+    let sseConnection = null;
+    
+    // Token持久化管理
+    const TOKEN_STORAGE_KEY = 'lanshell_auth_token';
+    const TOKEN_EXPIRY_KEY = 'lanshell_token_expiry';
+    
+    // 清除保存的token
+    function clearSavedToken() {
+      try {
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        localStorage.removeItem(TOKEN_EXPIRY_KEY);
+        console.log('🗑️ 已清除保存的token');
+      } catch (error) {
+        console.error('清除token失败:', error);
+      }
+    }
+    
+    // 强制登出处理
+    function handleForceLogout(reason, message) {
+      console.log(`🚨 收到强制登出通知: ${reason}`);
+      
+      // 清除本地token
+      clearSavedToken();
+      
+      // 停止所有活动
+      stopTokenManagement();
+      
+      // 关闭SSE连接
+      if (sseConnection) {
+        sseConnection.close();
+        sseConnection = null;
+      }
+      
+      // 显示通知
+      showToast(`🚨 ${message || '您已被强制登出'}`);
+      
+      // 延迟跳转到登录页面
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 3000);
+    }
+    
+    // 建立SSE连接监听强制登出
+    function establishSSEConnection() {
+      if (!authToken) return;
+      
+      try {
+        console.log('📡 建立SSE连接监听强制登出...');
+        sseConnection = new EventSource(`/api/events?token=${encodeURIComponent(authToken)}`);
+        
+        sseConnection.onopen = function(event) {
+          console.log('✅ SSE连接已建立');
+        };
+        
+        sseConnection.onmessage = function(event) {
+          try {
+            const data = JSON.parse(event.data);
+            console.log('📡 收到SSE消息:', data);
+            
+            switch (data.type) {
+              case 'connected':
+                console.log(`📡 SSE连接确认: ${data.connectionId}`);
+                break;
+                
+              case 'heartbeat':
+                // 心跳消息，保持连接活跃
+                break;
+                
+              case 'force_logout':
+                console.log('🚨 收到强制登出指令');
+                handleForceLogout(data.reason, data.message);
+                break;
+                
+              default:
+                console.log('📡 未知SSE消息类型:', data.type);
+            }
+          } catch (error) {
+            console.error('解析SSE消息失败:', error);
+          }
+        };
+        
+        sseConnection.onerror = function(event) {
+          console.error('❌ SSE连接错误:', event);
+          
+          // 重连逻辑
+          setTimeout(() => {
+            if (authToken && !sseConnection) {
+              console.log('🔄 尝试重新建立SSE连接...');
+              establishSSEConnection();
+            }
+          }, 5000);
+        };
+        
+        sseConnection.onclose = function(event) {
+          console.log('📡 SSE连接已关闭');
+          sseConnection = null;
+        };
+        
+      } catch (error) {
+        console.error('建立SSE连接失败:', error);
+      }
+    }
+    
+    // 安全登出功能
+    function secureLogout() {
+      if (confirm('确定要退出登录吗？这将结束所有设备上的会话。')) {
+        // 清除本地保存的token
+        clearSavedToken();
+        
+        // 关闭SSE连接
+        if (sseConnection) {
+          sseConnection.close();
+          sseConnection = null;
+        }
+        
+        // 通知服务器登出
+        fetch(`/api/logout?token=${encodeURIComponent(authToken)}`, {
+          method: 'POST'
+        }).then(() => {
+          console.log('✅ 已安全登出');
+        }).catch(error => {
+          console.error('登出请求失败:', error);
+        }).finally(() => {
+          // 跳转到登录页面
+          window.location.href = '/';
+        });
+      }
+    }
+    
+    function startSingleDeviceTokenManagement() {
+      // 建立SSE连接监听强制登出
+      establishSSEConnection();
+      
+      // 每10分钟刷新一次活跃状态（更宽松）
+      activityRefreshInterval = setInterval(async () => {
+        try {
+          const response = await fetch(`/api/refresh-activity?token=${encodeURIComponent(authToken)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          
+          if (!response.ok) {
+            console.log('⚠️ 定时Token刷新失败，但不强制退出');
+            // 不强制退出，让用户继续使用
+            // 只有在真正需要认证的操作时才会提示重新登录
+          } else {
+            console.log('✅ 定时活跃状态已刷新');
+          }
+        } catch (error) {
+          console.error('⚠️ 定时活跃状态刷新失败（可能是网络问题）:', error);
+          // 网络错误不应该导致强制退出
+        }
+      }, 10 * 60 * 1000); // 10分钟刷新一次
+    }
+    
+    function stopTokenManagement() {
+      if (activityRefreshInterval) {
+        clearInterval(activityRefreshInterval);
+        activityRefreshInterval = null;
+      }
+      
+      if (sseConnection) {
+        sseConnection.close();
+        sseConnection = null;
+      }
+    }
+
+    // 页面可见性变化时的处理 - 单设备简化版
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        // 页面变为可见时
+        console.log('📱 页面变为可见，开始验证token');
+        if (isPWA()) {
+          setTimeout(hideAddressBar, 100);
+        }
+        
+        // 刷新活跃状态（静默处理，不强制跳转）
+        if (authToken) {
+          console.log(`🔍 发送活跃状态刷新请求，token: ${authToken ? authToken.substring(0, 8) + '...' : 'null'}`);
+          fetch(`/api/refresh-activity?token=${encodeURIComponent(authToken)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          })
+          .then(response => {
+            console.log(`📡 活跃状态刷新响应: ${response.status}`);
+            if (!response.ok) {
+              console.log('⚠️ Token验证失败，但不强制退出（可能是短暂的网络问题）');
+              // 不立即跳转，给用户继续使用的机会
+              // 只在真正需要认证的操作时才会失败
+            } else {
+              console.log('✅ 切屏回来，活跃状态已刷新');
+              return response.json();
+            }
+          })
+          .then(data => {
+            if (data) {
+              console.log('📊 活跃状态刷新结果:', data);
+            }
+          })
+          .catch(error => {
+            console.error('⚠️ 活跃状态刷新失败（网络问题），继续使用:', error);
+            // 网络错误不应该导致退出登录
+          });
+        }
+      } else {
+        console.log('📱 页面变为隐藏');
+      }
+    });
+				  </script>
+</body>
+</html>

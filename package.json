@@ -1,0 +1,20 @@
+{
+  "name": "codex-agent",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "stop": "bash ./关闭服务.sh"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "description": "",
+  "dependencies": {
+    "canvas": "^3.2.0",
+    "express": "^5.2.1",
+    "node-pty": "^1.0.0",
+    "ws": "^8.18.3"
+  }
+}
