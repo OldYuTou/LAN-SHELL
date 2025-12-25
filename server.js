@@ -37,6 +37,8 @@ const ALLOWED_CMDS = (process.env.ALLOWED_CMDS || 'npm,node,yarn,pnpm,ls,bash')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
+// 用于“刷新后恢复终端输出”的回放缓冲区上限（字符数）
+const HISTORY_MAX_CHARS = Number.parseInt(process.env.HISTORY_MAX_CHARS || '', 10) || 500000;
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -156,6 +158,38 @@ const withinRoot = (targetPath) => {
 
 // Terminal session management
 const terminalSessions = new Map(); // id -> session
+
+function filterHistoryForReplay(data) {
+  // 过滤“清空回滚区”的控制序列：很多 clear 实现会输出 ESC[3J，导致回放时只能看到当前屏幕且无法上滑。
+  // 这里只影响“恢复回放”，不影响真实 PTY 会话本身。
+  try {
+    return String(data || '').replace(/\x1b\[3J/g, '');
+  } catch {
+    return '';
+  }
+}
+
+function trimHistoryForReplay(history) {
+  const s = String(history || '');
+  if (s.length <= HISTORY_MAX_CHARS) return s;
+  let start = s.length - HISTORY_MAX_CHARS;
+  // 尽量从换行边界开始，避免截断在半行/半个控制序列附近导致回放只剩“屏幕绘制片段”
+  const nl = s.indexOf('\n', start);
+  if (nl !== -1 && nl + 1 < s.length) start = nl + 1;
+  return s.slice(start);
+}
+
+function sendWsTextInChunks(ws, text, chunkSize = 16 * 1024) {
+  const s = String(text || '');
+  if (!s) return;
+  for (let i = 0; i < s.length; i += chunkSize) {
+    try {
+      ws.send(s.slice(i, i + chunkSize));
+    } catch {
+      break;
+    }
+  }
+}
 
 function generateSessionId() {
   return crypto.randomBytes(16).toString('hex');
@@ -349,7 +383,7 @@ wss.on('connection', (ws, req) => {
     }
     console.log(`🔄 重连到现有会话: ${sessionId}`);
     session.sockets.add(ws);
-    if (session.history) ws.send(session.history);
+    if (session.history) sendWsTextInChunks(ws, session.history);
     // Tell client the session id immediately (so it can persist/terminate reliably).
     ws.send(`SESSION_ID:${session.id}`);
   } else if (sessionId) {
@@ -398,8 +432,8 @@ wss.on('connection', (ws, req) => {
     ws.send(`SESSION_ID:${session.id}`);
 
     shell.onData((data) => {
-      session.history += data;
-      if (session.history.length > 50000) session.history = session.history.slice(-40000);
+      // 仅用于刷新后的回放：保留足够长的输出，并避免 clear 等操作把回滚区“清零”
+      session.history = trimHistoryForReplay((session.history || '') + filterHistoryForReplay(data));
       session.lastActivity = new Date();
 
       for (const sock of session.sockets) {

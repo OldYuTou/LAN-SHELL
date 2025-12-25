@@ -60,6 +60,7 @@ bash ./关闭服务.sh
 - `PORT`：HTTP 服务监听端口（默认 `6273`）
 - `ALLOW_ROOT`：允许访问/执行的根目录（默认：`$HOME`，若不存在则 `/`）
 - `ALLOWED_CMDS`：一次性命令运行白名单（默认：`npm,node,yarn,pnpm,ls,bash`）
+- `HISTORY_MAX_CHARS`：终端“刷新后恢复”回放缓冲上限（字符数，默认 `500000`；值越大可上滑越多，但会占用更多内存）
 
 示例：
 
