@@ -5,7 +5,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "stop": "bash ./关闭服务.sh"
+    "stop": "bash ./关闭服务.sh",
+    "start:test": "PORT=6174 node server.js",
+    "stop:test": "PORT=6174 bash ./关闭服务.sh"
   },
   "keywords": [],
   "author": "",
