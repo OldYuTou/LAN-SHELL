@@ -3002,9 +3002,19 @@
 			            startTs: Date.now(),
 			            startMap,
 			            maxMove: 0,
+			            endedCount: 0,
 			            cancelled: false,
 			          };
 			          state.one = null;
+			        }
+
+			        function updateMultiFingerByTouches(m, touches) {
+			          for (const t of Array.from(touches || [])) {
+			            const s = m.startMap.get(t.identifier);
+			            if (!s) continue;
+			            m.maxMove = Math.max(m.maxMove, dist(s.x, s.y, t.clientX, t.clientY));
+			          }
+			          if (m.maxMove > TAP_MAX_MOVE) m.cancelled = true;
 			        }
 
 			        function updateMultiFinger(e) {
@@ -3014,17 +3024,13 @@
 			            m.cancelled = true;
 			            return;
 			          }
-			          for (const t of Array.from(e.touches || [])) {
-			            const s = m.startMap.get(t.identifier);
-			            if (!s) continue;
-			            m.maxMove = Math.max(m.maxMove, dist(s.x, s.y, t.clientX, t.clientY));
-			          }
-			          if (m.maxMove > TAP_MAX_MOVE) m.cancelled = true;
+			          updateMultiFingerByTouches(m, e.touches);
 			        }
 
-			        function tryFireMultiTapIfDone() {
+			        function tryFireMultiTapIfDone({ force = false } = {}) {
 			          const m = state.multi;
 			          if (!m?.active) return;
+			          if (!force && m.endedCount < m.count) return;
 			          const elapsed = Date.now() - m.startTs;
 			          const ok = !m.cancelled && elapsed <= TAP_MAX_MS && m.maxMove <= TAP_MAX_MOVE;
 			          const count = m.count;
@@ -3092,7 +3098,7 @@
 			              state.multi = null;
 			            }
 			          },
-			          { passive: true }
+			          { passive: true, capture: true }
 			        );
 
 			        termArea.addEventListener(
@@ -3106,20 +3112,22 @@
 			              handleOneFingerMove(e);
 			            }
 			          },
-			          { passive: false }
+			          { passive: false, capture: true }
 			        );
 
 			        termArea.addEventListener(
 			          'touchend',
 			          (e) => {
 			            if (state.multi?.active) {
-			              // 只要中途手指数变化，就取消“轻触判定”
-			              if ((e.touches?.length || 0) !== 0) state.multi.cancelled = true;
-			              if ((e.touches?.length || 0) === 0) tryFireMultiTapIfDone();
+			              // 注意：多指点按会分多次触发 touchend（先抬起一根，再抬起另一根），不能在中途直接取消。
+			              state.multi.endedCount += (e.changedTouches?.length || 0);
+			              // 记录松开瞬间的位置（部分浏览器 touchmove 不一定覆盖到）
+			              updateMultiFingerByTouches(state.multi, e.changedTouches);
+			              tryFireMultiTapIfDone({ force: (e.touches?.length || 0) === 0 });
 			            }
 			            if ((e.touches?.length || 0) === 0) state.one = null;
 			          },
-			          { passive: true }
+			          { passive: true, capture: true }
 			        );
 
 			        termArea.addEventListener(
@@ -3128,7 +3136,7 @@
 			            state.one = null;
 			            state.multi = null;
 			          },
-			          { passive: true }
+			          { passive: true, capture: true }
 			        );
 			      }
 
