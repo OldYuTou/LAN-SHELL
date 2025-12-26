@@ -258,6 +258,9 @@
       flex:1; 
       background:#0f1115;
       overflow:hidden;
+      /* 触控手势：允许双指滚动，但单指滑动由 JS 接管用于“移动光标” */
+      touch-action: pan-x pan-y;
+      overscroll-behavior: contain;
       width:100%;
       max-width:100%;
       padding:5px; /* 减少内边距 */
@@ -423,6 +426,8 @@
         overflow:hidden !important;
         width:100% !important;
         max-width:100vw !important;
+        touch-action: pan-x pan-y;
+        overscroll-behavior: contain;
       }
       
       .term-pane {
@@ -2742,6 +2747,14 @@
 				      if (!toggleBtn || !floatingCmdBtn || !drawer || !backdrop || !closeBtn) return;
 					      if (!copyBtn || !pasteBtn || !comboBtn || !upBtn || !downBtn || !tabBtn || !enterBtn || !continueBtn || !escBtn || !ctrlCBtn) return;
 					      if (!pasteModalBackdrop || !pasteModal || !pasteModalCloseBtn || !pasteModalCancelBtn || !pasteModalOkBtn || !pasteInput) return;
+				      // 在终端区域启用手势：双指点按复制、三指点按粘贴、单指滑动发送方向键
+				      try {
+				        initTerminalGestures({
+				          termArea: document.getElementById('term-area'),
+				          copyBtn,
+				          pasteBtn,
+				        });
+				      } catch {}
 
 			      function openDrawer() {
 			        try {
@@ -2849,7 +2862,194 @@
 			          return;
 			        }
 			        s.ws.send(data);
-			        showToast(okMsg);
+			        if (okMsg) showToast(okMsg);
+			      }
+
+			      // 触控手势：通过手势触发右侧工具栏的既有能力（不改原快捷键/按钮逻辑）
+			      function initTerminalGestures({ termArea, copyBtn, pasteBtn } = {}) {
+			        if (!termArea || termArea.__lanShellGesturesInstalled) return;
+			        termArea.__lanShellGesturesInstalled = true;
+
+			        const TAP_MAX_MS = 260;
+			        const TAP_MAX_MOVE = 12; // px
+			        const AXIS_LOCK_THRESHOLD = 10; // px
+			        const STEP_PX = 18; // px：每移动多少像素发送一次方向键
+
+			        const state = {
+			          one: null,
+			          multi: null,
+			        };
+
+			        function sendToTerminalSilent(data) {
+			          const s = getActive();
+			          if (!s?.ws || s.ws.readyState !== 1) {
+			            showToast('❌ 终端未连接');
+			            return false;
+			          }
+			          try { s.ws.send(data); } catch { return false; }
+			          return true;
+			        }
+
+			        function dist(x1, y1, x2, y2) {
+			          const dx = x2 - x1;
+			          const dy = y2 - y1;
+			          return Math.hypot(dx, dy);
+			        }
+
+			        function startOneFinger(t) {
+			          state.one = {
+			            active: true,
+			            startX: t.clientX,
+			            startY: t.clientY,
+			            lastX: t.clientX,
+			            lastY: t.clientY,
+			            totalX: 0,
+			            totalY: 0,
+			            axis: null, // 'x' | 'y'
+			            accum: 0,
+			          };
+			          state.multi = null;
+			        }
+
+			        function startMultiFinger(e) {
+			          const touches = Array.from(e.touches || []);
+			          const count = touches.length;
+			          const startMap = new Map();
+			          for (const t of touches) startMap.set(t.identifier, { x: t.clientX, y: t.clientY });
+			          state.multi = {
+			            active: true,
+			            count,
+			            startTs: Date.now(),
+			            startMap,
+			            maxMove: 0,
+			            cancelled: false,
+			          };
+			          state.one = null;
+			        }
+
+			        function updateMultiFinger(e) {
+			          const m = state.multi;
+			          if (!m?.active) return;
+			          if ((e.touches?.length || 0) !== m.count) {
+			            m.cancelled = true;
+			            return;
+			          }
+			          for (const t of Array.from(e.touches || [])) {
+			            const s = m.startMap.get(t.identifier);
+			            if (!s) continue;
+			            m.maxMove = Math.max(m.maxMove, dist(s.x, s.y, t.clientX, t.clientY));
+			          }
+			          if (m.maxMove > TAP_MAX_MOVE) m.cancelled = true;
+			        }
+
+			        function tryFireMultiTapIfDone() {
+			          const m = state.multi;
+			          if (!m?.active) return;
+			          const elapsed = Date.now() - m.startTs;
+			          const ok = !m.cancelled && elapsed <= TAP_MAX_MS && m.maxMove <= TAP_MAX_MOVE;
+			          const count = m.count;
+			          state.multi = null;
+			          if (!ok) return;
+			          if (count === 2) {
+			            try { copyBtn?.click?.(); } catch {}
+			          } else if (count === 3) {
+			            try { pasteBtn?.click?.(); } catch {}
+			          }
+			        }
+
+			        function handleOneFingerMove(e) {
+			          const o = state.one;
+			          if (!o?.active) return;
+			          if ((e.touches?.length || 0) !== 1) return;
+
+			          // 单指移动：阻止页面滚动，把触控当作“触控板/方向键”
+			          try { e.preventDefault(); } catch {}
+
+			          const t = e.touches[0];
+			          const dx = t.clientX - o.lastX;
+			          const dy = t.clientY - o.lastY;
+			          o.lastX = t.clientX;
+			          o.lastY = t.clientY;
+
+			          o.totalX = t.clientX - o.startX;
+			          o.totalY = t.clientY - o.startY;
+
+			          if (!o.axis) {
+			            const ax = Math.abs(o.totalX);
+			            const ay = Math.abs(o.totalY);
+			            if (ax >= AXIS_LOCK_THRESHOLD || ay >= AXIS_LOCK_THRESHOLD) {
+			              o.axis = ax >= ay ? 'x' : 'y';
+			            }
+			          }
+
+			          if (!o.axis) return;
+
+			          if (o.axis === 'x') {
+			            o.accum += dx;
+			            const steps = Math.trunc(o.accum / STEP_PX);
+			            if (!steps) return;
+			            o.accum -= steps * STEP_PX;
+			            const key = steps > 0 ? '\x1b[C' : '\x1b[D';
+			            for (let i = 0; i < Math.abs(steps); i += 1) sendToTerminalSilent(key);
+			          } else {
+			            o.accum += dy;
+			            const steps = Math.trunc(o.accum / STEP_PX);
+			            if (!steps) return;
+			            o.accum -= steps * STEP_PX;
+			            const key = steps > 0 ? '\x1b[B' : '\x1b[A';
+			            for (let i = 0; i < Math.abs(steps); i += 1) sendToTerminalSilent(key);
+			          }
+			        }
+
+			        termArea.addEventListener(
+			          'touchstart',
+			          (e) => {
+			            const n = e.touches?.length || 0;
+			            if (n === 1) startOneFinger(e.touches[0]);
+			            else if (n === 2 || n === 3) startMultiFinger(e);
+			            else {
+			              state.one = null;
+			              state.multi = null;
+			            }
+			          },
+			          { passive: true }
+			        );
+
+			        termArea.addEventListener(
+			          'touchmove',
+			          (e) => {
+			            if (state.multi?.active) {
+			              updateMultiFinger(e);
+			              return; // 双指滚动/三指滑动：不干预
+			            }
+			            if (state.one?.active) {
+			              handleOneFingerMove(e);
+			            }
+			          },
+			          { passive: false }
+			        );
+
+			        termArea.addEventListener(
+			          'touchend',
+			          (e) => {
+			            if (state.multi?.active) {
+			              // 只要中途手指数变化，就取消“轻触判定”
+			              if ((e.touches?.length || 0) !== 0) state.multi.cancelled = true;
+			              if ((e.touches?.length || 0) === 0) tryFireMultiTapIfDone();
+			            }
+			            if ((e.touches?.length || 0) === 0) state.one = null;
+			          },
+			          { passive: true }
+			        );
+
+			        termArea.addEventListener(
+			          'touchcancel',
+			          () => {
+			            state.one = null;
+			            state.multi = null;
+			          },
+			          { passive: true }
+			        );
 			      }
 
 			      // Ctrl / Alt 组合键一次性开关
