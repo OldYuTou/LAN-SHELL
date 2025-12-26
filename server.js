@@ -262,6 +262,12 @@ function resolveCwdFromReq(req, { queryKey = 'cwd', bodyKey = 'cwd', defaultValu
   if (raw.trim() === '.') return { ok: false, error: 'forbidden at root', cwd: null, raw };
   const target = path.resolve(ROOT, raw);
   if (!withinRoot(target)) return { ok: false, error: 'out of root', cwd: null, raw };
+  try {
+    const rel = path.relative(ROOT, target);
+    const parts = rel.split(path.sep).filter(Boolean);
+    const hasHidden = parts.some((p) => p.startsWith('.') && p !== '.' && p !== '..');
+    if (hasHidden) return { ok: false, error: 'forbidden in hidden dir', cwd: null, raw };
+  } catch {}
   return { ok: true, cwd: target, raw };
 }
 
