@@ -811,6 +811,28 @@
 		    }
 		    #cmdset-page.open { display: flex; }
 
+		    /* Git 页面（复用指令集样式） */
+		    #git-page {
+		      position: fixed;
+		      inset: 0;
+		      background: rgba(15, 17, 21, 0.98);
+		      z-index: 10050;
+		      display: none;
+		      flex-direction: column;
+		      box-sizing: border-box;
+		      padding: calc(env(safe-area-inset-top, 0px)) calc(env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px)) calc(env(safe-area-inset-left, 0px));
+		    }
+		    #git-page.open { display: flex; }
+
+		    #gitCwdText {
+		      margin-top: 3px;
+		      font-size: 12px;
+		      opacity: 0.75;
+		      white-space: nowrap;
+		      overflow: hidden;
+		      text-overflow: ellipsis;
+		    }
+
 		    .cmdset-topbar {
 		      display: flex;
 		      align-items: center;
@@ -1122,6 +1144,24 @@
 			    <div id="cmdsetBody" class="cmdset-body">
 			      <div id="cmdsetEmpty" class="cmdset-empty" style="display:none;">暂无指令或文件夹</div>
 			      <div id="cmdsetList"></div>
+			    </div>
+			  </div>
+
+			  <!-- Git 页面（长按“指令集”按钮进入） -->
+			  <div id="git-page" aria-hidden="true">
+			    <div class="cmdset-topbar">
+			      <button id="gitBackBtn" class="cmdset-icon-btn" title="返回">←</button>
+			      <div class="cmdset-title-wrap">
+			        <div class="cmdset-title">Git</div>
+			        <div class="cmdset-subtitle" id="gitCwdText">—</div>
+			      </div>
+			      <div class="cmdset-actions">
+			        <button id="gitRefreshBtn" class="cmdset-icon-btn" title="刷新">⟳</button>
+			      </div>
+			    </div>
+			    <div class="cmdset-body">
+			      <div id="gitInfoBox" class="cmdset-empty"></div>
+			      <div id="gitList"></div>
 			    </div>
 			  </div>
 
@@ -2708,6 +2748,158 @@
 		      }
 		    }
 
+			    // ========= Git 历史页（长按“指令集”按钮进入） =========
+			    function initGitPage() {
+			      const page = document.getElementById('git-page');
+			      const backBtn = document.getElementById('gitBackBtn');
+			      const refreshBtn = document.getElementById('gitRefreshBtn');
+			      const cwdText = document.getElementById('gitCwdText');
+			      const infoBox = document.getElementById('gitInfoBox');
+			      const listEl = document.getElementById('gitList');
+			      if (!page || !backBtn || !refreshBtn || !cwdText || !infoBox || !listEl) return;
+
+			      const state = {
+			        loading: false,
+			        cwd: '.',
+			      };
+
+			      function getTargetCwd() {
+			        try {
+			          const s = getActive?.();
+			          if (s?.cwd) return s.cwd;
+			        } catch {}
+			        try {
+			          const v = document.getElementById('path')?.value;
+			          if (v) return v;
+			        } catch {}
+			        return '.';
+			      }
+
+			      function openPage() {
+			        page.classList.add('open');
+			        page.setAttribute('aria-hidden', 'false');
+			      }
+
+			      function closePage() {
+			        page.classList.remove('open');
+			        page.setAttribute('aria-hidden', 'true');
+			      }
+
+			      function escapeHtml(s) {
+			        return String(s ?? '')
+			          .replace(/&/g, '&amp;')
+			          .replace(/</g, '&lt;')
+			          .replace(/>/g, '&gt;')
+			          .replace(/\"/g, '&quot;')
+			          .replace(/'/g, '&#39;');
+			      }
+
+			      function setInfo(text) {
+			        infoBox.style.display = 'block';
+			        infoBox.textContent = String(text ?? '');
+			      }
+
+			      function clearList() {
+			        listEl.innerHTML = '';
+			      }
+
+			      function renderCommits(commits) {
+			        clearList();
+			        if (!Array.isArray(commits) || !commits.length) return;
+			        infoBox.style.display = 'none';
+			        for (const c of commits) {
+			          const item = document.createElement('div');
+			          item.className = 'cmdset-item';
+			          item.innerHTML = `
+			            <span class="ico">⎇</span>
+			            <span class="name">${escapeHtml(c.subject || '(no subject)')}</span>
+			            <span class="meta">${escapeHtml((c.shortHash || '').trim())} · ${escapeHtml((c.author || '').trim())}</span>
+			          `;
+			          item.onclick = async (e) => {
+			            e.preventDefault();
+			            e.stopPropagation();
+			            const hash = String(c.hash || '').trim();
+			            if (!hash) return;
+			            const ok = await writeClipboard(hash);
+			            showToast(ok ? '✅ 已复制提交哈希' : '❌ 复制失败');
+			          };
+			          listEl.appendChild(item);
+			        }
+			      }
+
+			      async function fetchJson(url, options) {
+			        const res = await fetch(url, options);
+			        const data = await res.json().catch(() => ({}));
+			        if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+			        return data;
+			      }
+
+			      async function refresh({ allowInitPrompt = false } = {}) {
+			        if (state.loading) return;
+			        state.loading = true;
+			        const cwd = getTargetCwd();
+			        state.cwd = cwd;
+			        cwdText.textContent = cwd;
+			        setInfo('加载中…');
+			        clearList();
+			        try {
+			          const info = await fetchJson(`/api/git/info?cwd=${encodeURIComponent(cwd)}`);
+			          if (!info?.gitAvailable) {
+			            setInfo('⚠️ 当前环境未安装 Git 或不可用。');
+			            return;
+			          }
+			          if (!info?.isRepo) {
+			            if (allowInitPrompt) {
+			              const ok = confirm(`当前文件夹（${cwd}）未初始化 Git，是否执行 git init？`);
+			              if (!ok) return;
+			              await fetchJson('/api/git/init', {
+			                method: 'POST',
+			                headers: { 'Content-Type': 'application/json' },
+			                body: JSON.stringify({ cwd }),
+			              });
+			              showToast('✅ 已执行 git init');
+			            } else {
+			              setInfo('当前文件夹未初始化 Git。');
+			              return;
+			            }
+			          }
+
+			          const commitsResp = await fetchJson(`/api/git/commits?cwd=${encodeURIComponent(cwd)}&limit=80`);
+			          const branch = commitsResp?.branch ? `分支：${commitsResp.branch}` : '';
+			          const root = commitsResp?.repoRoot ? `仓库：${commitsResp.repoRoot}` : '';
+			          const header = `${branch}${branch && root ? ' · ' : ''}${root}`.trim();
+			          if (!commitsResp?.commits?.length) {
+			            setInfo(header ? `${header}（暂无提交）` : '暂无提交记录。');
+			          } else {
+			            setInfo(header || '提交历史');
+			          }
+			          renderCommits(commitsResp?.commits || []);
+			        } catch (e) {
+			          setInfo(`❌ 加载失败：${escapeHtml(e?.message || 'unknown')}`);
+			        } finally {
+			          state.loading = false;
+			        }
+			      }
+
+			      function openGitPage({ promptInit = false } = {}) {
+			        openPage();
+			        refresh({ allowInitPrompt: promptInit }).catch(() => {});
+			      }
+
+			      backBtn.onclick = (e) => {
+			        e.preventDefault();
+			        e.stopPropagation();
+			        closePage();
+			      };
+			      refreshBtn.onclick = (e) => {
+			        e.preventDefault();
+			        e.stopPropagation();
+			        refresh({ allowInitPrompt: false }).catch(() => {});
+			      };
+
+			      window.openGitPage = openGitPage;
+			    }
+
 				    function initSideActions() {
 				      const toggleBtn = document.getElementById('drawerToggleBtn');
 				      const floatingCmdBtn = document.getElementById('cmdsetFloatingBtn');
@@ -2926,8 +3118,35 @@
 			      floatingCmdBtn.onclick = (e) => {
 			        e.preventDefault();
 			        e.stopPropagation();
+			        if (floatingCmdBtn.__suppressClickOnce) {
+			          floatingCmdBtn.__suppressClickOnce = false;
+			          return;
+			        }
 			        try { openCommandSetsPage(); } catch {}
 			      };
+
+			      // 长按“指令集”按钮：进入 Git 页面（若未初始化 Git，则提示是否 git init）
+			      {
+			        let timer = null;
+			        const longPressMs = 520;
+			        const start = () => {
+			          try {
+			            if (timer) clearTimeout(timer);
+			            timer = setTimeout(() => {
+			              try { floatingCmdBtn.__suppressClickOnce = true; } catch {}
+			              try { window.openGitPage?.({ promptInit: true }); } catch {}
+			            }, longPressMs);
+			          } catch {}
+			        };
+			        const cancel = () => {
+			          if (timer) clearTimeout(timer);
+			          timer = null;
+			        };
+			        floatingCmdBtn.addEventListener('pointerdown', start);
+			        floatingCmdBtn.addEventListener('pointerup', cancel);
+			        floatingCmdBtn.addEventListener('pointercancel', cancel);
+			        floatingCmdBtn.addEventListener('pointerleave', cancel);
+			      }
 		      closeBtn.onclick = (e) => {
 		        e.preventDefault();
 		        e.stopPropagation();
@@ -3559,6 +3778,9 @@
 
 	      // 初始化指令集页面
 	      initCommandSets();
+
+	      // 初始化 Git 页面
+	      initGitPage();
 
 		      initSideActions();
 		      loadDir('.');

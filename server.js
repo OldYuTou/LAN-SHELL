@@ -27,6 +27,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
+import { execFile } from 'child_process';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -195,6 +196,20 @@ function generateSessionId() {
   return crypto.randomBytes(16).toString('hex');
 }
 
+function execFileAsync(file, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    execFile(file, args, { ...options, encoding: 'utf8', maxBuffer: 2 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) {
+        err.stdout = stdout;
+        err.stderr = stderr;
+        reject(err);
+        return;
+      }
+      resolve({ stdout, stderr });
+    });
+  });
+}
+
 // List directory contents (NO AUTH)
 app.get('/api/fs', (req, res) => {
   const rel = req.query.path || '.';
@@ -239,6 +254,126 @@ app.put('/api/command-sets', (req, res) => {
   } catch (e) {
     console.error('写入指令集失败:', e?.message || e);
     res.status(500).json({ error: 'write failed' });
+  }
+});
+
+function resolveCwdFromReq(req, { queryKey = 'cwd', bodyKey = 'cwd', defaultValue = '.' } = {}) {
+  const raw = (req.query?.[queryKey] ?? req.body?.[bodyKey] ?? defaultValue).toString();
+  const target = path.resolve(ROOT, raw);
+  if (!withinRoot(target)) return { ok: false, error: 'out of root', cwd: null, raw };
+  return { ok: true, cwd: target, raw };
+}
+
+async function detectGitInfo(cwd) {
+  try {
+    await execFileAsync('git', ['--version']);
+  } catch {
+    return { gitAvailable: false, isRepo: false, repoRoot: null, branch: null };
+  }
+
+  try {
+    const r = await execFileAsync('git', ['-C', cwd, 'rev-parse', '--is-inside-work-tree']);
+    const inside = String(r.stdout || '').trim() === 'true';
+    if (!inside) return { gitAvailable: true, isRepo: false, repoRoot: null, branch: null };
+  } catch {
+    return { gitAvailable: true, isRepo: false, repoRoot: null, branch: null };
+  }
+
+  let repoRoot = null;
+  let branch = null;
+  try {
+    const r = await execFileAsync('git', ['-C', cwd, 'rev-parse', '--show-toplevel']);
+    repoRoot = String(r.stdout || '').trim() || null;
+  } catch {}
+  try {
+    const r = await execFileAsync('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD']);
+    branch = String(r.stdout || '').trim() || null;
+  } catch {}
+
+  return { gitAvailable: true, isRepo: true, repoRoot, branch };
+}
+
+// Git info/commits/init (NO AUTH)
+app.get('/api/git/info', async (req, res) => {
+  const r = resolveCwdFromReq(req, { queryKey: 'cwd' });
+  if (!r.ok) return res.status(403).json({ error: r.error });
+  try {
+    const info = await detectGitInfo(r.cwd);
+    res.json({ ok: true, cwd: r.cwd, ...info });
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'git info failed' });
+  }
+});
+
+app.get('/api/git/commits', async (req, res) => {
+  const r = resolveCwdFromReq(req, { queryKey: 'cwd' });
+  if (!r.ok) return res.status(403).json({ error: r.error });
+  const limit = Math.min(200, Math.max(1, Number.parseInt((req.query.limit || '').toString(), 10) || 50));
+  try {
+    const info = await detectGitInfo(r.cwd);
+    if (!info.gitAvailable) return res.json({ ok: true, cwd: r.cwd, gitAvailable: false, isRepo: false, commits: [] });
+    if (!info.isRepo) return res.json({ ok: true, cwd: r.cwd, gitAvailable: true, isRepo: false, commits: [] });
+
+    const format = '%H%x1f%h%x1f%an%x1f%ad%x1f%s';
+    const { stdout } = await execFileAsync('git', [
+      '-C',
+      r.cwd,
+      'log',
+      `-n`,
+      String(limit),
+      '--date=iso-strict',
+      `--pretty=format:${format}`,
+    ]);
+
+    const lines = String(stdout || '')
+      .split('\n')
+      .map((s) => s.trimEnd())
+      .filter(Boolean);
+
+    const commits = lines
+      .map((line) => line.split('\x1f'))
+      .filter((parts) => parts.length >= 5)
+      .map(([hash, shortHash, author, date, subject]) => ({
+        hash,
+        shortHash,
+        author,
+        date,
+        subject,
+      }));
+
+    res.json({ ok: true, cwd: r.cwd, ...info, commits });
+  } catch (e) {
+    // 可能是“还没有任何提交”
+    const msg = String(e?.stderr || e?.message || '');
+    if (/does not have any commits|your current branch/i.test(msg)) {
+      const info = await detectGitInfo(r.cwd);
+      return res.json({ ok: true, cwd: r.cwd, ...info, commits: [] });
+    }
+    res.status(500).json({ error: e?.message || 'git log failed' });
+  }
+});
+
+app.post('/api/git/init', async (req, res) => {
+  const r = resolveCwdFromReq(req, { bodyKey: 'cwd' });
+  if (!r.ok) return res.status(403).json({ error: r.error });
+
+  try {
+    const st = fs.statSync(r.cwd);
+    if (!st.isDirectory()) return res.status(400).json({ error: 'cwd is not a directory' });
+  } catch {
+    return res.status(400).json({ error: 'cwd not found' });
+  }
+
+  try {
+    const info = await detectGitInfo(r.cwd);
+    if (!info.gitAvailable) return res.status(400).json({ error: 'git not available' });
+    if (info.isRepo) return res.json({ ok: true, cwd: r.cwd, already: true, ...info });
+
+    await execFileAsync('git', ['-C', r.cwd, 'init']);
+    const info2 = await detectGitInfo(r.cwd);
+    res.json({ ok: true, cwd: r.cwd, already: false, ...info2 });
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'git init failed' });
   }
 });
 
