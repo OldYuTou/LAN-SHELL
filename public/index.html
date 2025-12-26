@@ -2840,6 +2840,12 @@
 			        const cwd = getTargetCwd();
 			        state.cwd = cwd;
 			        cwdText.textContent = cwd;
+			        if (String(cwd || '').trim() === '.') {
+			          setInfo('⚠️ 为安全起见，禁止在根目录（.）打开 Git 管理页。请先进入具体项目目录。');
+			          clearList();
+			          state.loading = false;
+			          return;
+			        }
 			        setInfo('加载中…');
 			        clearList();
 			        try {
@@ -3133,6 +3139,15 @@
 			          try {
 			            if (timer) clearTimeout(timer);
 			            timer = setTimeout(() => {
+			              // 禁止在根目录（.）打开 Git 管理页
+			              try {
+			                const s = getActive?.();
+			                const cwd = s?.cwd || document.getElementById('path')?.value || '.';
+			                if (String(cwd || '').trim() === '.') {
+			                  showToast('⚠️ 根目录（.）禁止打开 Git 管理页');
+			                  return;
+			                }
+			              } catch {}
 			              try { floatingCmdBtn.__suppressClickOnce = true; } catch {}
 			              try { window.openGitPage?.({ promptInit: true }); } catch {}
 			            }, longPressMs);

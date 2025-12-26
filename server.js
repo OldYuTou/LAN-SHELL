@@ -259,6 +259,7 @@ app.put('/api/command-sets', (req, res) => {
 
 function resolveCwdFromReq(req, { queryKey = 'cwd', bodyKey = 'cwd', defaultValue = '.' } = {}) {
   const raw = (req.query?.[queryKey] ?? req.body?.[bodyKey] ?? defaultValue).toString();
+  if (raw.trim() === '.') return { ok: false, error: 'forbidden at root', cwd: null, raw };
   const target = path.resolve(ROOT, raw);
   if (!withinRoot(target)) return { ok: false, error: 'out of root', cwd: null, raw };
   return { ok: true, cwd: target, raw };
