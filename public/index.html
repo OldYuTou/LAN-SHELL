@@ -1052,21 +1052,9 @@
 		      <button id="drawerCloseBtn" title="Close">×</button>
 		    </div>
 			    <div class="drawer-actions">
-			      <button id="copyLatestBtn" title="Copy last output">
-			        <span class="k">COPY</span>
-			      </button>
-		      <button id="pasteClipboardBtn" title="Paste clipboard">
-		        <span class="k">PASTE</span>
-		      </button>
 		      <button id="orientationLockBtn" title="旋转：锁定竖屏/允许旋转">
 		        <span class="k">ROT</span>
 		      </button>
-		      <button id="upBtn" title="Up arrow">
-		        <span class="k">UP</span>
-		      </button>
-				      <button id="downBtn" title="Down arrow">
-				        <span class="k">DOWN</span>
-			      </button>
 			      <button id="tabBtn" title="Tab">
 			        <span class="k">TAB</span>
 			      </button>
@@ -1641,11 +1629,11 @@
 	        if (e.ctrlKey && e.key === 'c' && e.shiftKey) {
 	          // Ctrl+Shift+C 复制
 	          e.preventDefault();
-	          document.getElementById('copyLatestBtn')?.click();
+	          try { window.__lanShellQuickActions?.copyLastOutput?.(); } catch {}
 	        } else if (e.ctrlKey && e.key === 'v' && e.shiftKey) {
 	          // Ctrl+Shift+V 粘贴
 	          e.preventDefault();
-	          document.getElementById('pasteClipboardBtn')?.click();
+	          try { window.__lanShellQuickActions?.pasteClipboard?.(); } catch {}
 	        }
 	      }
 	    });
@@ -2727,14 +2715,10 @@
 				      const backdrop = document.getElementById('drawer-backdrop');
 				      const closeBtn = document.getElementById('drawerCloseBtn');
 
-				      const copyBtn = document.getElementById('copyLatestBtn');
-				      const pasteBtn = document.getElementById('pasteClipboardBtn');
 				      const orientationBtn = document.getElementById('orientationLockBtn');
 				      const ctrlToggleBtn = document.getElementById('ctrlToggleBtn');
 				      const altToggleBtn = document.getElementById('altToggleBtn');
 				      const comboBtn = document.getElementById('comboFloatingBtn');
-				      const upBtn = document.getElementById('upBtn');
-				      const downBtn = document.getElementById('downBtn');
 				      const tabBtn = document.getElementById('tabBtn');
 				      const enterBtn = document.getElementById('enterBtn');
 				      const continueBtn = document.getElementById('continueBtn');
@@ -2749,16 +2733,8 @@
 				      const pasteInput = document.getElementById('paste-input');
 
 				      if (!toggleBtn || !floatingCmdBtn || !drawer || !backdrop || !closeBtn) return;
-					      if (!copyBtn || !pasteBtn || !orientationBtn || !comboBtn || !upBtn || !downBtn || !tabBtn || !enterBtn || !continueBtn || !escBtn || !ctrlCBtn) return;
+					      if (!orientationBtn || !comboBtn || !tabBtn || !enterBtn || !continueBtn || !escBtn || !ctrlCBtn) return;
 					      if (!pasteModalBackdrop || !pasteModal || !pasteModalCloseBtn || !pasteModalCancelBtn || !pasteModalOkBtn || !pasteInput) return;
-				      // 在终端区域启用手势：双指点按复制、三指点按粘贴、单指滑动发送方向键
-				      try {
-				        initTerminalGestures({
-				          termArea: document.getElementById('term-area'),
-				          copyBtn,
-				          pasteBtn,
-				        });
-				      } catch {}
 
 				      // 旋转锁：无法读取“系统旋转锁”状态，只提供 App 内开关（PWA 默认启用竖屏锁）
 				      {
@@ -2871,6 +2847,56 @@
 				        applyPref({ silent: true }).catch(() => {});
 				      }
 
+				      // 将“复制/粘贴”能力保留为逻辑函数（从工具栏移除按钮，但手势/快捷键仍可触发）
+				      async function copyLastOutput() {
+				        const s = getActive();
+				        if (!s?.term) {
+				          showToast('❌ 没有活动的终端会话');
+				          return;
+				        }
+				        const latest =
+				          (s.lastReplyText && s.lastReplyText.trim())
+				            ? s.lastReplyText.trimEnd()
+				            : ((s.lastReplyLine && s.lastReplyLine.trim()) ? s.lastReplyLine : getLatestNonEmptyLine(s.term));
+				        const cleaned = stripTerminalControl(latest).trimEnd();
+				        if (!cleaned) {
+				          showToast('⚠️ 没有可复制的内容');
+				          return;
+				        }
+				        const ok = await writeClipboard(cleaned);
+				        showToast(ok ? '✅ 已复制最后一次输出' : '❌ 复制失败（请允许剪贴板权限）');
+				      }
+
+				      async function pasteClipboard() {
+				        try {
+				          const text = await readClipboard();
+				          if (!text) {
+				            // 无权限/为空：改为弹出输入框，保证“二指长按粘贴”总有可用回退
+				            openPasteModal();
+				            showToast('⚠️ 无法读取剪贴板，已打开粘贴输入框');
+				            return;
+				          }
+				          pasteTextToActiveTerminal(text);
+				        } catch {
+				          openPasteModal();
+				          showToast('⚠️ 无法读取剪贴板，已打开粘贴输入框');
+				        }
+				      }
+
+				      // 在终端区域启用手势：二指点按复制、二指长按粘贴、单指滑动发送方向键
+				      try {
+				        initTerminalGestures({
+				          termArea: document.getElementById('term-area'),
+				          onCopy: copyLastOutput,
+				          onPaste: pasteClipboard,
+				        });
+				      } catch {}
+
+				      // 让键盘快捷键（移动端 Ctrl+Shift+C / Ctrl+Shift+V）可以复用
+				      try {
+				        window.__lanShellQuickActions = { copyLastOutput, pasteClipboard };
+				      } catch {}
+
 			      function openDrawer() {
 			        try {
 			          const w = drawer.getBoundingClientRect().width || drawer.offsetWidth || 0;
@@ -2918,33 +2944,7 @@
 		        } catch {}
 		      });
 
-		      async function copyLastOutput() {
-		        const s = getActive();
-		        if (!s?.term) {
-		          showToast('❌ 没有活动的终端会话');
-		          return;
-		        }
-		        const latest =
-		          (s.lastReplyText && s.lastReplyText.trim())
-		            ? s.lastReplyText.trimEnd()
-		            : ((s.lastReplyLine && s.lastReplyLine.trim()) ? s.lastReplyLine : getLatestNonEmptyLine(s.term));
-		        const cleaned = stripTerminalControl(latest).trimEnd();
-		        if (!cleaned) {
-		          showToast('⚠️ 没有可复制的内容');
-		          return;
-		        }
-		        const ok = await writeClipboard(cleaned);
-		        showToast(ok ? '✅ 已复制最后一次输出' : '❌ 复制失败（请允许剪贴板权限）');
-		      }
-
-				      async function pasteClipboard() {
-				        const text = await readClipboard();
-				        if (!text) {
-				          showToast('⚠️ 剪贴板为空或无权限');
-				          return;
-				        }
-				        pasteTextToActiveTerminal(text);
-				      }
+		      // copyLastOutput / pasteClipboard 已上移：工具栏移除按钮后仍供手势/快捷键调用
 
 			      function openPasteModal() {
 			        try {
@@ -2981,7 +2981,7 @@
 			      }
 
 			      // 触控手势：通过手势触发右侧工具栏的既有能力（不改原快捷键/按钮逻辑）
-			      function initTerminalGestures({ termArea, copyBtn, pasteBtn } = {}) {
+			      function initTerminalGestures({ termArea, onCopy, onPaste } = {}) {
 			        if (!termArea || termArea.__lanShellGesturesInstalled) return;
 			        termArea.__lanShellGesturesInstalled = true;
 
@@ -3056,7 +3056,7 @@
 			                m.longPressFired = true;
 			                // 长按已触发：不再将其判定为“二指点按复制”
 			                m.cancelled = true;
-			                try { pasteBtn?.click?.(); } catch {}
+			                try { onPaste?.(); } catch {}
 			              }, LONG_PRESS_MS);
 			            } catch {}
 			          }
@@ -3103,7 +3103,7 @@
 			          state.multi = null;
 			          if (!ok) return;
 			          if (count === 2) {
-			            try { copyBtn?.click?.(); } catch {}
+			            try { onCopy?.(); } catch {}
 			          }
 			        }
 
@@ -3281,20 +3281,6 @@
 			        resetModifiers();
 			      }
 
-		      copyBtn.onclick = async (e) => {
-		        e.preventDefault();
-		        e.stopPropagation();
-		        await copyLastOutput();
-		      };
-			      pasteBtn.onclick = async (e) => {
-			        e.preventDefault();
-			        e.stopPropagation();
-			        if (pasteBtn.__suppressClickOnce) {
-			          pasteBtn.__suppressClickOnce = false;
-			          return;
-			        }
-			        await pasteClipboard();
-			      };
 			      // 组合键弹窗逻辑
 			      const comboBackdrop = document.getElementById('combo-modal-backdrop');
 			      const comboModal = document.getElementById('combo-modal');
@@ -3391,16 +3377,7 @@
 			          sendComboFromModal();
 			        }
 			      });
-			      upBtn.onclick = (e) => {
-			        e.preventDefault();
-			        e.stopPropagation();
-			        sendToTerminal('\x1b[A', '✅ UP');
-			      };
-				      downBtn.onclick = (e) => {
-				        e.preventDefault();
-				        e.stopPropagation();
-				        sendToTerminal('\x1b[B', '✅ DOWN');
-				      };
+			      // removed: COPY/PASTE/UP/DOWN buttons in toolbar
 				      tabBtn.onclick = (e) => {
 				        e.preventDefault();
 				        e.stopPropagation();
@@ -3452,28 +3429,7 @@
 			        handleModifierKeydown(e);
 			      }, true);
 
-			      // Long-press PASTE to open input modal (mobile-friendly).
-			      {
-			        let timer = null;
-			        const longPressMs = 520;
-			        const start = (e) => {
-			          try {
-			            if (timer) clearTimeout(timer);
-			            timer = setTimeout(() => {
-			              pasteBtn.__suppressClickOnce = true;
-			              openPasteModal();
-			            }, longPressMs);
-			          } catch {}
-			        };
-			        const cancel = () => {
-			          if (timer) clearTimeout(timer);
-			          timer = null;
-			        };
-			        pasteBtn.addEventListener('pointerdown', start);
-			        pasteBtn.addEventListener('pointerup', cancel);
-			        pasteBtn.addEventListener('pointercancel', cancel);
-			        pasteBtn.addEventListener('pointerleave', cancel);
-			      }
+			      // removed: PASTE button long-press (use two-finger long-press or fallback modal)
 
 			      pasteModalBackdrop.onclick = closePasteModal;
 			      pasteModalCloseBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); closePasteModal(); };
