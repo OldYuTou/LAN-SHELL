@@ -2763,6 +2763,7 @@
 				      // 旋转锁：无法读取“系统旋转锁”状态，只提供 App 内开关（PWA 默认启用竖屏锁）
 				      {
 				        const ORIENT_KEY = 'lan_shell_orient_lock'; // 'portrait' | 'off'
+				        let isActuallyLocked = false;
 				        const getPref = () => {
 				          try { return localStorage.getItem(ORIENT_KEY); } catch { return null; }
 				        };
@@ -2777,49 +2778,82 @@
 
 				        const syncBtn = () => {
 				          const v = getPref();
-				          const on = v === 'portrait';
+				          const wants = v === 'portrait';
+				          const on = wants && isActuallyLocked;
 				          try { orientationBtn.classList.toggle('active', on); } catch {}
-				          try { orientationBtn.title = on ? '旋转：已锁定竖屏（点击允许旋转）' : '旋转：允许旋转（点击锁定竖屏）'; } catch {}
+				          try {
+				            if (on) orientationBtn.title = '旋转：已锁定竖屏（点击允许旋转）';
+				            else if (wants) orientationBtn.title = '旋转：将尝试锁定竖屏（需浏览器支持/可能需PWA或HTTPS）';
+				            else orientationBtn.title = '旋转：允许旋转（点击锁定竖屏）';
+				          } catch {}
 				        };
 
 				        const unlock = () => {
 				          try { screen?.orientation?.unlock?.(); } catch {}
+				          isActuallyLocked = false;
 				        };
 
 				        const lockPortrait = async ({ silent = false } = {}) => {
 				          try {
+				            if (!window.isSecureContext) {
+				              if (!silent) showToast('⚠️ 锁定旋转需要HTTPS安全上下文（或localhost）');
+				              return false;
+				            }
 				            if (!screen?.orientation?.lock) {
 				              if (!silent) showToast('⚠️ 当前浏览器不支持锁定旋转');
 				              return false;
 				            }
 				            await screen.orientation.lock('portrait-primary');
+				            isActuallyLocked = true;
 				            return true;
 				          } catch (e) {
 				            // 常见：需要一次用户手势 / 仅 PWA 或全屏可用
 				            if (!silent) showToast('⚠️ 锁定旋转失败：可能需要在PWA/全屏或点击后生效');
+				            isActuallyLocked = false;
 				            return false;
 				          }
 				        };
 
 				        const applyPref = async ({ silent = false } = {}) => {
-				          syncBtn();
 				          const v = getPref();
 				          if (v === 'portrait') {
+				            // 先清空实际锁定状态，避免“徒有其表”
+				            isActuallyLocked = false;
+				            syncBtn();
 				            const ok = await lockPortrait({ silent: true });
-				            if (!ok) {
-				              // 兜底：等下一次用户交互再试一次，提升成功率
+				            if (ok) {
+				              syncBtn();
+				              if (!silent) showToast('✅ 已锁定竖屏');
+				              return;
+				            }
+
+				            // 兜底：等下一次用户交互再试一次，提升成功率（只有在安全上下文且支持 API 时才值得重试）
+				            if (window.isSecureContext && screen?.orientation?.lock) {
 				              const retry = async () => {
 				                document.removeEventListener('touchstart', retry, true);
 				                document.removeEventListener('click', retry, true);
-				                await lockPortrait({ silent });
+				                const ok2 = await lockPortrait({ silent });
+				                syncBtn();
+				                if (ok2 && !silent) showToast('✅ 已锁定竖屏');
+				                if (!ok2 && !silent) {
+				                  setPref('off');
+				                  unlock();
+				                  syncBtn();
+				                }
 				              };
 				              document.addEventListener('touchstart', retry, { capture: true, once: true, passive: true });
 				              document.addEventListener('click', retry, { capture: true, once: true });
-				            } else if (!silent) {
-				              showToast('✅ 已锁定竖屏');
+				              syncBtn();
+				            } else {
+				              // 无法锁定：回退为 off，避免按钮表现与实际不一致
+				              if (!silent) showToast('⚠️ 当前环境无法锁定旋转（建议使用HTTPS或安装PWA）');
+				              setPref('off');
+				              unlock();
+				              syncBtn();
 				            }
 				          } else {
 				            unlock();
+				            syncBtn();
 				            if (!silent) showToast('✅ 已允许旋转');
 				          }
 				        };
@@ -2828,7 +2862,8 @@
 				          e.preventDefault();
 				          e.stopPropagation();
 				          const v = getPref();
-				          setPref(v === 'portrait' ? 'off' : 'portrait');
+				          const next = v === 'portrait' ? 'off' : 'portrait';
+				          setPref(next);
 				          await applyPref();
 				        };
 
