@@ -2986,6 +2986,7 @@
 			        termArea.__lanShellGesturesInstalled = true;
 
 			        const TAP_MAX_MS = 260;
+			        const LONG_PRESS_MS = 520;
 			        const TAP_MAX_MOVE = 12; // px
 			        const AXIS_LOCK_THRESHOLD = 10; // px
 			        const STEP_PX = 18; // px：每移动多少像素发送一次方向键
@@ -3038,9 +3039,36 @@
 			            startMap,
 			            maxMove: 0,
 			            endedCount: 0,
+			            longPressTimer: null,
+			            longPressFired: false,
 			            cancelled: false,
 			          };
 			          state.one = null;
+
+			          // 二指长按：粘贴（等价点击右侧 PASTE）
+			          if (count === 2) {
+			            try {
+			              state.multi.longPressTimer = setTimeout(() => {
+			                const m = state.multi;
+			                if (!m?.active || m.longPressFired) return;
+			                if (m.cancelled) return;
+			                if (m.maxMove > TAP_MAX_MOVE) return;
+			                m.longPressFired = true;
+			                // 长按已触发：不再将其判定为“二指点按复制”
+			                m.cancelled = true;
+			                try { pasteBtn?.click?.(); } catch {}
+			              }, LONG_PRESS_MS);
+			            } catch {}
+			          }
+			        }
+
+			        function cancelMultiLongPressTimer() {
+			          const m = state.multi;
+			          if (!m) return;
+			          if (m.longPressTimer) {
+			            try { clearTimeout(m.longPressTimer); } catch {}
+			            m.longPressTimer = null;
+			          }
 			        }
 
 			        function updateMultiFingerByTouches(m, touches) {
@@ -3057,14 +3085,17 @@
 			          if (!m?.active) return;
 			          if ((e.touches?.length || 0) !== m.count) {
 			            m.cancelled = true;
+			            cancelMultiLongPressTimer();
 			            return;
 			          }
 			          updateMultiFingerByTouches(m, e.touches);
+			          if (m.maxMove > TAP_MAX_MOVE) cancelMultiLongPressTimer();
 			        }
 
 			        function tryFireMultiTapIfDone({ force = false } = {}) {
 			          const m = state.multi;
 			          if (!m?.active) return;
+			          cancelMultiLongPressTimer();
 			          if (!force && m.endedCount < m.count) return;
 			          const elapsed = Date.now() - m.startTs;
 			          const ok = !m.cancelled && elapsed <= TAP_MAX_MS && m.maxMove <= TAP_MAX_MOVE;
@@ -3073,8 +3104,6 @@
 			          if (!ok) return;
 			          if (count === 2) {
 			            try { copyBtn?.click?.(); } catch {}
-			          } else if (count === 3) {
-			            try { pasteBtn?.click?.(); } catch {}
 			          }
 			        }
 
@@ -3158,7 +3187,13 @@
 			              state.multi.endedCount += (e.changedTouches?.length || 0);
 			              // 记录松开瞬间的位置（部分浏览器 touchmove 不一定覆盖到）
 			              updateMultiFingerByTouches(state.multi, e.changedTouches);
+			              // 二指长按已经触发时，不再尝试点按判定
+			              if (state.multi.longPressFired) {
+			                cancelMultiLongPressTimer();
+			                if ((e.touches?.length || 0) === 0) state.multi = null;
+			              } else {
 			              tryFireMultiTapIfDone({ force: (e.touches?.length || 0) === 0 });
+			              }
 			            }
 			            if ((e.touches?.length || 0) === 0) state.one = null;
 			          },
@@ -3168,6 +3203,7 @@
 			        termArea.addEventListener(
 			          'touchcancel',
 			          () => {
+			            cancelMultiLongPressTimer();
 			            state.one = null;
 			            state.multi = null;
 			          },
