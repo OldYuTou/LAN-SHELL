@@ -1058,6 +1058,9 @@
 		      <button id="pasteClipboardBtn" title="Paste clipboard">
 		        <span class="k">PASTE</span>
 		      </button>
+		      <button id="orientationLockBtn" title="旋转：锁定竖屏/允许旋转">
+		        <span class="k">ROT</span>
+		      </button>
 		      <button id="upBtn" title="Up arrow">
 		        <span class="k">UP</span>
 		      </button>
@@ -2726,6 +2729,7 @@
 
 				      const copyBtn = document.getElementById('copyLatestBtn');
 				      const pasteBtn = document.getElementById('pasteClipboardBtn');
+				      const orientationBtn = document.getElementById('orientationLockBtn');
 				      const ctrlToggleBtn = document.getElementById('ctrlToggleBtn');
 				      const altToggleBtn = document.getElementById('altToggleBtn');
 				      const comboBtn = document.getElementById('comboFloatingBtn');
@@ -2745,7 +2749,7 @@
 				      const pasteInput = document.getElementById('paste-input');
 
 				      if (!toggleBtn || !floatingCmdBtn || !drawer || !backdrop || !closeBtn) return;
-					      if (!copyBtn || !pasteBtn || !comboBtn || !upBtn || !downBtn || !tabBtn || !enterBtn || !continueBtn || !escBtn || !ctrlCBtn) return;
+					      if (!copyBtn || !pasteBtn || !orientationBtn || !comboBtn || !upBtn || !downBtn || !tabBtn || !enterBtn || !continueBtn || !escBtn || !ctrlCBtn) return;
 					      if (!pasteModalBackdrop || !pasteModal || !pasteModalCloseBtn || !pasteModalCancelBtn || !pasteModalOkBtn || !pasteInput) return;
 				      // 在终端区域启用手势：双指点按复制、三指点按粘贴、单指滑动发送方向键
 				      try {
@@ -2755,6 +2759,82 @@
 				          pasteBtn,
 				        });
 				      } catch {}
+
+				      // 旋转锁：无法读取“系统旋转锁”状态，只提供 App 内开关（PWA 默认启用竖屏锁）
+				      {
+				        const ORIENT_KEY = 'lan_shell_orient_lock'; // 'portrait' | 'off'
+				        const getPref = () => {
+				          try { return localStorage.getItem(ORIENT_KEY); } catch { return null; }
+				        };
+				        const setPref = (v) => {
+				          try { localStorage.setItem(ORIENT_KEY, v); } catch {}
+				        };
+
+				        // PWA/独立模式下默认锁定竖屏，避免误横屏（可手动关闭）
+				        try {
+				          if (!getPref() && isPWA()) setPref('portrait');
+				        } catch {}
+
+				        const syncBtn = () => {
+				          const v = getPref();
+				          const on = v === 'portrait';
+				          try { orientationBtn.classList.toggle('active', on); } catch {}
+				          try { orientationBtn.title = on ? '旋转：已锁定竖屏（点击允许旋转）' : '旋转：允许旋转（点击锁定竖屏）'; } catch {}
+				        };
+
+				        const unlock = () => {
+				          try { screen?.orientation?.unlock?.(); } catch {}
+				        };
+
+				        const lockPortrait = async ({ silent = false } = {}) => {
+				          try {
+				            if (!screen?.orientation?.lock) {
+				              if (!silent) showToast('⚠️ 当前浏览器不支持锁定旋转');
+				              return false;
+				            }
+				            await screen.orientation.lock('portrait-primary');
+				            return true;
+				          } catch (e) {
+				            // 常见：需要一次用户手势 / 仅 PWA 或全屏可用
+				            if (!silent) showToast('⚠️ 锁定旋转失败：可能需要在PWA/全屏或点击后生效');
+				            return false;
+				          }
+				        };
+
+				        const applyPref = async ({ silent = false } = {}) => {
+				          syncBtn();
+				          const v = getPref();
+				          if (v === 'portrait') {
+				            const ok = await lockPortrait({ silent: true });
+				            if (!ok) {
+				              // 兜底：等下一次用户交互再试一次，提升成功率
+				              const retry = async () => {
+				                document.removeEventListener('touchstart', retry, true);
+				                document.removeEventListener('click', retry, true);
+				                await lockPortrait({ silent });
+				              };
+				              document.addEventListener('touchstart', retry, { capture: true, once: true, passive: true });
+				              document.addEventListener('click', retry, { capture: true, once: true });
+				            } else if (!silent) {
+				              showToast('✅ 已锁定竖屏');
+				            }
+				          } else {
+				            unlock();
+				            if (!silent) showToast('✅ 已允许旋转');
+				          }
+				        };
+
+				        orientationBtn.onclick = async (e) => {
+				          e.preventDefault();
+				          e.stopPropagation();
+				          const v = getPref();
+				          setPref(v === 'portrait' ? 'off' : 'portrait');
+				          await applyPref();
+				        };
+
+				        // 初始化：按偏好应用一次（尽量静默，避免首次弹 toast）
+				        applyPref({ silent: true }).catch(() => {});
+				      }
 
 			      function openDrawer() {
 			        try {
