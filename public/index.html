@@ -292,7 +292,7 @@
 		    /* 文本编辑器面板：与终端 pane 同级，复用 tabs/右侧内容区 */
 		    .editor-pane {
 		      position:absolute;
-		      inset:5px 5px 0 5px;
+		      inset:5px;
 		      overflow:hidden;
 		      display:flex;
 		      flex-direction:column;
@@ -344,6 +344,7 @@
 		    .editor-body {
 		      flex:1;
 		      min-height:0;
+		      height:0; /* 避免部分移动端/Safari 下 % 高度在 flex 容器里计算不稳定 */
 		      overflow:hidden;
 		    }
 		    .editor-pane .CodeMirror {
@@ -1644,6 +1645,9 @@
 	          // 强制设置高度，驱动 #term-area 触发 ResizeObserver -> xterm resize
 	          document.body.style.height = height + 'px';
 	          document.documentElement.style.height = height + 'px';
+
+	          // 编辑器同样需要跟随视口变化刷新，否则会出现顶部/底部被裁切、滚动高度不正确等问题
+	          try { refreshAllEditors(); } catch {}
 	        };
 	        
 	        setViewportHeight();
@@ -1869,7 +1873,7 @@
           if (session.resizeTerminal) {
             session.resizeTerminal();
           } else if (session.type === 'editor') {
-            try { session.cm?.refresh?.(); } catch {}
+            refreshEditorSession(session);
           }
         });
       }, 350); // 等待CSS动画完成
@@ -2226,6 +2230,7 @@
 	        lineWrapping: false,
 	        viewportMargin: 20,
 	      });
+	      try { cm.setSize('100%', '100%'); } catch {}
 
 	      const session = {
 	        type: 'editor',
@@ -2772,7 +2777,7 @@
 	          if (s?._pendingTermWrites) scheduleTermFlush(s);
 	          try { s.term?.focus?.(); } catch {}
 	        } else if (s?.type === 'editor') {
-	          try { s.cm?.refresh?.(); } catch {}
+	          refreshEditorSession(s);
 	          try { s.cm?.focus?.(); } catch {}
 	        }
 	      } catch {}
@@ -2783,11 +2788,24 @@
 	      return sessions.find(s => s.id === activeId);
 	    }
 
+	    function refreshEditorSession(s) {
+	      try {
+	        if (!s || s.type !== 'editor' || !s.cm) return;
+	        // setSize 能显式解决某些浏览器下 CodeMirror 高度计算偏差（导致顶部/底部被裁切）
+	        try { s.cm.setSize('100%', '100%'); } catch {}
+	        try { s.cm.refresh(); } catch {}
+	      } catch {}
+	    }
+
+	    function refreshAllEditors() {
+	      try { sessions.forEach(refreshEditorSession); } catch {}
+	    }
+
 	    // 编辑器在容器尺寸变化时需要 refresh，否则可能出现空白/高度不正确（尤其是移动端旋转/软键盘弹出）
 	    window.addEventListener('resize', () => {
 	      try {
 	        const s = getActive();
-	        if (s?.type === 'editor') s.cm?.refresh?.();
+	        if (s?.type === 'editor') refreshEditorSession(s);
 	      } catch {}
 	    });
 
