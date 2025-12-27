@@ -895,6 +895,10 @@
 		      color: #fff;
 		      cursor: pointer;
 		    }
+		    #git-reset-modal .actions button:disabled {
+		      opacity: 0.45;
+		      cursor: not-allowed;
+		    }
 		    #git-reset-modal .actions button.primary {
 		      background: rgba(45, 140, 255, 0.92);
 		      border-color: rgba(45, 140, 255, 0.65);
@@ -2876,6 +2880,7 @@
 			        cwd: '.',
 			        resetCommit: null,
 			        resetSubject: '',
+			        resetPushed: null,
 			      };
 
 			      function getTargetCwd() {
@@ -2955,7 +2960,7 @@
 			            const ok = await writeClipboard(hash);
 			            showToast(ok ? '✅ 已复制提交哈希' : '❌ 复制失败');
 			          };
-			          // 长按：对“未推送”的提交提供软/硬回退（回退到该提交）
+			          // 长按：打开操作弹窗（reset 仅未推送可用；revert 对任意提交可用）
 			          {
 			            let timer = null;
 			            const longPressMs = 520;
@@ -2963,12 +2968,9 @@
 			              try {
 			                if (timer) clearTimeout(timer);
 			                timer = setTimeout(() => {
-			                  if (c.pushed !== false) {
-			                    showToast('⚠️ 仅支持撤回“未推送”的提交');
-			                    return;
-			                  }
 			                  state.resetCommit = String(c.hash || '').trim();
 			                  state.resetSubject = String(c.subject || '').trim();
+			                  state.resetPushed = c.pushed;
 			                  openResetModal();
 			                }, longPressMs);
 			              } catch {}
@@ -3065,11 +3067,19 @@
 
 			      function openResetModal() {
 			        const subj = state.resetSubject ? `“${state.resetSubject}”` : '(无标题)';
+			        const canReset = state.resetPushed === false;
+			        try { resetSoftBtn.disabled = !canReset; } catch {}
+			        try { resetHardBtn.disabled = !canReset; } catch {}
+			        try {
+			          resetSoftBtn.title = canReset ? '软回退：reset 到该提交' : '仅未推送提交可用';
+			          resetHardBtn.title = canReset ? '硬回退：reset 到该提交' : '仅未推送提交可用';
+			        } catch {}
 			        resetDesc.textContent =
 			          `将回退到该提交：${subj}\n\n` +
 			          `软回退：仅移动指针到该提交，不改动工作区文件（差异会保留为暂存区/待提交状态）。\n` +
 			          `硬回退：指针与工作区文件一起回到该提交（会丢弃未提交的工作区改动）。\n` +
-			          `Revert：生成一个新的提交来反做该提交的改动（更安全，但可能产生冲突）。`;
+			          `Revert：生成一个新的提交来反做该提交的改动（可用于已推送提交，但可能产生冲突）。\n\n` +
+			          `提示：Reset 仅对“未推送”提交开放；Revert 对历史提交更安全。`;
 			        resetBackdrop.classList.add('open');
 			        resetModal.classList.add('open');
 			        resetBackdrop.setAttribute('aria-hidden', 'false');
@@ -3083,6 +3093,7 @@
 			        resetModal.setAttribute('aria-hidden', 'true');
 			        state.resetCommit = null;
 			        state.resetSubject = '';
+			        state.resetPushed = null;
 			      }
 
 			      async function doReset(mode) {

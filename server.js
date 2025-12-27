@@ -485,10 +485,6 @@ app.post('/api/git/revert', async (req, res) => {
     if (!info.gitAvailable) return res.status(400).json({ error: 'git not available' });
     if (!info.isRepo) return res.status(400).json({ error: 'not a git repo' });
 
-    // Require upstream so we can reliably determine pushed/unpushed.
-    const upstream = await detectUpstream(r.cwd);
-    if (!upstream) return res.status(400).json({ error: 'upstream not configured' });
-
     // Ensure commit exists and is a commit object.
     try {
       await execFileAsync('git', ['-C', r.cwd, 'cat-file', '-e', `${commit}^{commit}`]);
@@ -496,17 +492,26 @@ app.post('/api/git/revert', async (req, res) => {
       return res.status(400).json({ error: 'invalid commit' });
     }
 
-    // Forbid reverting a commit that is already on upstream (pushed).
+    // Only allow reverting commits that are reachable from current HEAD.
     try {
-      await execFileAsync('git', ['-C', r.cwd, 'merge-base', '--is-ancestor', commit, upstream]);
-      return res.status(400).json({ error: 'commit already on upstream (pushed)' });
+      await execFileAsync('git', ['-C', r.cwd, 'merge-base', '--is-ancestor', commit, 'HEAD']);
     } catch {
-      // ok
+      return res.status(400).json({ error: 'commit not reachable from HEAD' });
     }
 
     // Avoid complex states: require clean working tree.
     const { stdout: statusOut } = await execFileAsync('git', ['-C', r.cwd, 'status', '--porcelain']);
     if (String(statusOut || '').trim()) return res.status(400).json({ error: 'working tree not clean' });
+
+    // Merge commits require -m; keep the API safe and predictable.
+    try {
+      const { stdout: parentsStdout } = await execFileAsync('git', ['-C', r.cwd, 'rev-list', '--parents', '-n', '1', commit]);
+      const parts = String(parentsStdout || '').trim().split(/\s+/).filter(Boolean);
+      const parentCount = Math.max(0, parts.length - 1);
+      if (parentCount > 1) {
+        return res.status(400).json({ error: 'merge commit revert not supported', hint: '该提交是 merge commit，请在终端手动执行：git revert -m 1 <commit>（或选择正确的主线）。' });
+      }
+    } catch {}
 
     // Create a new commit that reverses changes introduced by `commit`.
     try {
@@ -521,6 +526,7 @@ app.post('/api/git/revert', async (req, res) => {
     }
 
     const { stdout: newHeadStdout } = await execFileAsync('git', ['-C', r.cwd, 'rev-parse', 'HEAD']);
+    const upstream = await detectUpstream(r.cwd);
     res.json({ ok: true, cwd: r.cwd, upstream, reverted: commit, head: String(newHeadStdout || '').trim() });
   } catch (e) {
     res.status(500).json({ error: e?.message || 'git revert failed' });
