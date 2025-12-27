@@ -1257,7 +1257,7 @@
 			  <div id="git-reset-backdrop" aria-hidden="true"></div>
 			  <div id="git-reset-modal" role="dialog" aria-modal="true" aria-hidden="true">
 			    <div class="row">
-			      <div class="title">撤回提交</div>
+			      <div class="title">回退到此提交</div>
 			      <button class="close" id="gitResetCloseBtn" title="Close">×</button>
 			    </div>
 			    <div id="gitResetDesc" class="desc"></div>
@@ -2953,7 +2953,7 @@
 			            const ok = await writeClipboard(hash);
 			            showToast(ok ? '✅ 已复制提交哈希' : '❌ 复制失败');
 			          };
-			          // 长按：对“最新且未推送”的提交提供软/硬回退（撤回该提交）
+			          // 长按：对“未推送”的提交提供软/硬回退（回退到该提交）
 			          {
 			            let timer = null;
 			            const longPressMs = 520;
@@ -2961,10 +2961,6 @@
 			              try {
 			                if (timer) clearTimeout(timer);
 			                timer = setTimeout(() => {
-			                  if (idx !== 0) {
-			                    showToast('⚠️ 仅支持撤回最新提交');
-			                    return;
-			                  }
 			                  if (c.pushed !== false) {
 			                    showToast('⚠️ 仅支持撤回“未推送”的提交');
 			                    return;
@@ -3068,9 +3064,9 @@
 			      function openResetModal() {
 			        const subj = state.resetSubject ? `“${state.resetSubject}”` : '(无标题)';
 			        resetDesc.textContent =
-			          `将撤回最新提交：${subj}\n\n` +
-			          `软回退：移动提交指针，不改动工作区文件（改动会保留在暂存区/待提交状态）。\n` +
-			          `硬回退：移动指针并强制回到上一个版本（会丢弃未提交的工作区改动）。`;
+			          `将回退到该提交：${subj}\n\n` +
+			          `软回退：仅移动指针到该提交，不改动工作区文件（差异会保留为暂存区/待提交状态）。\n` +
+			          `硬回退：指针与工作区文件一起回到该提交（会丢弃未提交的工作区改动）。`;
 			        resetBackdrop.classList.add('open');
 			        resetModal.classList.add('open');
 			        resetBackdrop.setAttribute('aria-hidden', 'false');

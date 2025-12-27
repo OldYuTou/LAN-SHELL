@@ -447,18 +447,11 @@ app.post('/api/git/reset', async (req, res) => {
       return res.status(400).json({ error: 'invalid commit' });
     }
 
-    // Only allow "撤回本次提交" for the latest commit (HEAD).
-    const { stdout: headStdout } = await execFileAsync('git', ['-C', r.cwd, 'rev-parse', 'HEAD']);
-    const head = String(headStdout || '').trim();
-    if (!head) return res.status(400).json({ error: 'HEAD not found' });
-    if (head !== commit) return res.status(400).json({ error: 'only HEAD can be reverted via reset' });
-
     // Require upstream so we can reliably determine pushed/unpushed.
     const upstream = await detectUpstream(r.cwd);
     if (!upstream) return res.status(400).json({ error: 'upstream not configured' });
 
-    // If HEAD is already reachable from upstream, treat it as pushed and forbid reset here.
-    // (Prevents accidental history rewrite after pushing.)
+    // Forbid resetting to a commit that is already on upstream (pushed).
     try {
       await execFileAsync('git', ['-C', r.cwd, 'merge-base', '--is-ancestor', commit, upstream]);
       return res.status(400).json({ error: 'commit already on upstream (pushed)' });
@@ -466,19 +459,16 @@ app.post('/api/git/reset', async (req, res) => {
       // non-zero exit means "not an ancestor" -> ok (unpushed or divergent)
     }
 
-    // Reset to the parent of the commit being undone.
-    let parent = '';
+    // Only allow resetting to a commit reachable from current HEAD (avoid arbitrary/dangling objects).
     try {
-      const { stdout } = await execFileAsync('git', ['-C', r.cwd, 'rev-parse', `${commit}^`]);
-      parent = String(stdout || '').trim();
+      await execFileAsync('git', ['-C', r.cwd, 'merge-base', '--is-ancestor', commit, 'HEAD']);
     } catch {
-      return res.status(400).json({ error: 'no parent commit (cannot reset)' });
+      return res.status(400).json({ error: 'commit not reachable from HEAD' });
     }
-    if (!parent) return res.status(400).json({ error: 'no parent commit (cannot reset)' });
 
-    await execFileAsync('git', ['-C', r.cwd, 'reset', mode === 'soft' ? '--soft' : '--hard', parent]);
+    await execFileAsync('git', ['-C', r.cwd, 'reset', mode === 'soft' ? '--soft' : '--hard', commit]);
     const { stdout: newHeadStdout } = await execFileAsync('git', ['-C', r.cwd, 'rev-parse', 'HEAD']);
-    res.json({ ok: true, cwd: r.cwd, mode, upstream, undone: commit, target: parent, head: String(newHeadStdout || '').trim() });
+    res.json({ ok: true, cwd: r.cwd, mode, upstream, target: commit, head: String(newHeadStdout || '').trim() });
   } catch (e) {
     res.status(500).json({ error: e?.message || 'git reset failed' });
   }
