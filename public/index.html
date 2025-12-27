@@ -1636,7 +1636,12 @@
 	          // 优先使用 VisualViewport：iOS/Android 的软键盘弹出通常只会触发 visualViewport.resize，
 	          // 不一定会触发 window.resize；如果只用 innerHeight，终端区域不会跟着“变矮”，输入行就会被键盘挡住。
 	          const vv = window.visualViewport;
-	          const height = Math.max(0, Math.floor((vv?.height || window.innerHeight || 0)));
+	          const winH = Math.max(0, Math.floor(window.innerHeight || 0));
+	          const vvH = Math.max(0, Math.floor(vv?.height || 0));
+	          // Android Edge 等浏览器在页面初始化/切后台回前台/地址栏动画阶段，visualViewport.height 可能短暂变成极小值，
+	          // 这会把 body 强制压到几像素，表现为“页面空白/被裁切”。这里给一个下限防抖。
+	          const MIN_VALID_H = 180;
+	          const height = (vvH >= MIN_VALID_H ? vvH : winH);
 	          if (!height) return;
 
 	          const vh = (height * 0.01);
