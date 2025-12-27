@@ -2881,6 +2881,7 @@
 			        resetCommit: null,
 			        resetSubject: '',
 			        resetPushed: null,
+			        resetIsUpstreamHead: false,
 			      };
 
 			      function getTargetCwd() {
@@ -2971,6 +2972,7 @@
 			                  state.resetCommit = String(c.hash || '').trim();
 			                  state.resetSubject = String(c.subject || '').trim();
 			                  state.resetPushed = c.pushed;
+			                  state.resetIsUpstreamHead = Boolean(c.isUpstreamHead);
 			                  openResetModal();
 			                }, longPressMs);
 			              } catch {}
@@ -3050,7 +3052,7 @@
 			          if (!commitsResp?.commits?.length) {
 			            setInfo(header ? `${header}（暂无提交）\n${upstream}` : `暂无提交记录。\n${upstream}`);
 			          } else {
-			            setInfo(`${header || '提交历史'}\n${upstream}\n提示：绿色=已推送，橙色=未推送，灰色=未知`);
+			            setInfo(`${header || '提交历史'}\n${upstream}\n提示：绿色=已推送，橙色=未推送，灰色=未知；长按条目可 Reset/Revert`);
 			          }
 			          renderCommits(commitsResp?.commits || []);
 			        } catch (e) {
@@ -3067,19 +3069,19 @@
 
 			      function openResetModal() {
 			        const subj = state.resetSubject ? `“${state.resetSubject}”` : '(无标题)';
-			        const canReset = state.resetPushed === false;
+			        const canReset = state.resetPushed === false || (state.resetPushed === true && state.resetIsUpstreamHead === true);
 			        try { resetSoftBtn.disabled = !canReset; } catch {}
 			        try { resetHardBtn.disabled = !canReset; } catch {}
 			        try {
-			          resetSoftBtn.title = canReset ? '软回退：reset 到该提交' : '仅未推送提交可用';
-			          resetHardBtn.title = canReset ? '硬回退：reset 到该提交' : '仅未推送提交可用';
+			          resetSoftBtn.title = canReset ? '软回退：reset 到该提交' : '仅未推送提交或云端最新提交可用';
+			          resetHardBtn.title = canReset ? '硬回退：reset 到该提交' : '仅未推送提交或云端最新提交可用';
 			        } catch {}
 			        resetDesc.textContent =
 			          `将回退到该提交：${subj}\n\n` +
 			          `软回退：仅移动指针到该提交，不改动工作区文件（差异会保留为暂存区/待提交状态）。\n` +
 			          `硬回退：指针与工作区文件一起回到该提交（会丢弃未提交的工作区改动）。\n` +
 			          `Revert：生成一个新的提交来反做该提交的改动（可用于已推送提交，但可能产生冲突）。\n\n` +
-			          `提示：Reset 仅对“未推送”提交开放；Revert 对历史提交更安全。`;
+			          `提示：Reset 对“未推送”提交开放；对“已推送”提交仅允许回退到云端最新（用于与云端同步）；Revert 对历史提交更安全。`;
 			        resetBackdrop.classList.add('open');
 			        resetModal.classList.add('open');
 			        resetBackdrop.setAttribute('aria-hidden', 'false');
@@ -3094,6 +3096,7 @@
 			        state.resetCommit = null;
 			        state.resetSubject = '';
 			        state.resetPushed = null;
+			        state.resetIsUpstreamHead = false;
 			      }
 
 			      async function doReset(mode) {

@@ -332,6 +332,13 @@ app.get('/api/git/commits', async (req, res) => {
     if (!info.isRepo) return res.json({ ok: true, cwd: r.cwd, gitAvailable: true, isRepo: false, commits: [] });
 
     const upstream = await detectUpstream(r.cwd); // may be null (no remote/upstream)
+    let upstreamHead = null;
+    if (upstream) {
+      try {
+        const { stdout } = await execFileAsync('git', ['-C', r.cwd, 'rev-parse', upstream]);
+        upstreamHead = String(stdout || '').trim() || null;
+      } catch {}
+    }
 
     const format = '%H%x1f%h%x1f%an%x1f%ad%x1f%s';
     const { stdout } = await execFileAsync('git', [
@@ -379,22 +386,31 @@ app.get('/api/git/commits', async (req, res) => {
       commits = commits.map((c) => ({
         ...c,
         pushed: !unpushed.has(c.hash),
+        isUpstreamHead: upstreamHead ? c.hash === upstreamHead : false,
       }));
     } else {
       commits = commits.map((c) => ({
         ...c,
         pushed: null, // unknown: no upstream configured
+        isUpstreamHead: null,
       }));
     }
 
-    res.json({ ok: true, cwd: r.cwd, ...info, upstream, commits });
+    res.json({ ok: true, cwd: r.cwd, ...info, upstream, upstreamHead, commits });
   } catch (e) {
     // 可能是“还没有任何提交”
     const msg = String(e?.stderr || e?.message || '');
     if (/does not have any commits|your current branch/i.test(msg)) {
       const info = await detectGitInfo(r.cwd);
       const upstream = info?.isRepo ? await detectUpstream(r.cwd).catch(() => null) : null;
-      return res.json({ ok: true, cwd: r.cwd, ...info, upstream, commits: [] });
+      let upstreamHead = null;
+      if (upstream) {
+        try {
+          const { stdout } = await execFileAsync('git', ['-C', r.cwd, 'rev-parse', upstream]);
+          upstreamHead = String(stdout || '').trim() || null;
+        } catch {}
+      }
+      return res.json({ ok: true, cwd: r.cwd, ...info, upstream, upstreamHead, commits: [] });
     }
     res.status(500).json({ error: e?.message || 'git log failed' });
   }
@@ -451,12 +467,13 @@ app.post('/api/git/reset', async (req, res) => {
     const upstream = await detectUpstream(r.cwd);
     if (!upstream) return res.status(400).json({ error: 'upstream not configured' });
 
-    // Forbid resetting to a commit that is already on upstream (pushed).
+    // Determine whether target commit is on upstream.
+    let isOnUpstream = false;
     try {
       await execFileAsync('git', ['-C', r.cwd, 'merge-base', '--is-ancestor', commit, upstream]);
-      return res.status(400).json({ error: 'commit already on upstream (pushed)' });
+      isOnUpstream = true;
     } catch {
-      // non-zero exit means "not an ancestor" -> ok (unpushed or divergent)
+      isOnUpstream = false;
     }
 
     // Only allow resetting to a commit reachable from current HEAD (avoid arbitrary/dangling objects).
@@ -466,9 +483,30 @@ app.post('/api/git/reset', async (req, res) => {
       return res.status(400).json({ error: 'commit not reachable from HEAD' });
     }
 
+    // If the target commit is pushed, only allow resetting to the *latest* upstream commit
+    // (sync local back to cloud). Older pushed commits remain forbidden.
+    let upstreamHead = null;
+    try {
+      const { stdout } = await execFileAsync('git', ['-C', r.cwd, 'rev-parse', upstream]);
+      upstreamHead = String(stdout || '').trim() || null;
+    } catch {}
+
+    if (isOnUpstream) {
+      if (!upstreamHead) return res.status(400).json({ error: 'cannot resolve upstream head' });
+      if (commit !== upstreamHead) return res.status(400).json({ error: 'only upstream head can be reset to when pushed' });
+    }
+
     await execFileAsync('git', ['-C', r.cwd, 'reset', mode === 'soft' ? '--soft' : '--hard', commit]);
     const { stdout: newHeadStdout } = await execFileAsync('git', ['-C', r.cwd, 'rev-parse', 'HEAD']);
-    res.json({ ok: true, cwd: r.cwd, mode, upstream, target: commit, head: String(newHeadStdout || '').trim() });
+    res.json({
+      ok: true,
+      cwd: r.cwd,
+      mode,
+      upstream,
+      upstreamHead,
+      target: commit,
+      head: String(newHeadStdout || '').trim(),
+    });
   } catch (e) {
     res.status(500).json({ error: e?.message || 'git reset failed' });
   }
