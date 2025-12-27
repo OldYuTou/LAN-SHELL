@@ -130,7 +130,7 @@ bash ./关闭服务.sh 6174
 
 ## License
 
-MIT License，详见 `LICENSE`。
+GNU Affero General Public License v3.0 License，详见 `LICENSE`。
 
 [`↑ 返回顶部`](#top) | [`English`](#en)
 
@@ -261,6 +261,6 @@ bash ./关闭服务.sh 6174
 
 ## License
 
-MIT License. See `LICENSE`.
+GNU Affero General Public License v3.0. See `LICENSE`.
 
 [`↑ Back to top`](#top) | [`中文`](#zh-cn)
