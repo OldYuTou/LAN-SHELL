@@ -499,9 +499,20 @@ app.post('/api/git/revert', async (req, res) => {
       return res.status(400).json({ error: 'commit not reachable from HEAD' });
     }
 
-    // Avoid complex states: require clean working tree.
+    // Avoid complex states: require clean working tree (but allow untracked files).
+    // Many users keep artifacts (e.g. *.zip/*.bundle) untracked; reverting is still safe in that case.
     const { stdout: statusOut } = await execFileAsync('git', ['-C', r.cwd, 'status', '--porcelain']);
-    if (String(statusOut || '').trim()) return res.status(400).json({ error: 'working tree not clean' });
+    const statusLines = String(statusOut || '')
+      .split('\n')
+      .map((s) => s.trimEnd())
+      .filter(Boolean);
+    const hasTrackedChanges = statusLines.some((line) => !line.startsWith('?? '));
+    if (hasTrackedChanges) {
+      return res.status(400).json({
+        error: 'working tree not clean',
+        hint: '请先提交/暂存/还原当前改动（允许存在未跟踪文件）。',
+      });
+    }
 
     // Merge commits require -m; keep the API safe and predictable.
     try {

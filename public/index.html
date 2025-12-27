@@ -3128,7 +3128,7 @@
 			          });
 			          const data = await res.json().catch(() => ({}));
 			          if (!res.ok) {
-			            const msg = data?.error || `HTTP ${res.status}`;
+			            const msg = data?.hint ? `${data?.error || `HTTP ${res.status}`}（${data.hint}）` : (data?.error || `HTTP ${res.status}`);
 			            if (res.status === 409) throw new Error(`${msg}：${data?.hint || ''}`.trim());
 			            throw new Error(msg);
 			          }
