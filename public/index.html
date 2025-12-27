@@ -253,26 +253,28 @@
     }
     .tab .close:hover { background:rgba(255,255,255,0.2); }
     
-	    #term-area { 
-	      position:relative; 
-	      flex:1; 
-	      background:#0f1115;
-	      overflow:hidden;
+		    #term-area { 
+		      position:relative; 
+		      flex:1; 
+		      background:#0f1115;
+		      overflow:hidden;
 	      /* 触控手势：终端区域优先用于滚动；底部“空白触控板”区域用于单指移动光标 */
 	      touch-action: pan-x pan-y;
-	      overscroll-behavior: contain;
-	      width:100%;
-	      max-width:100%;
-	      padding:5px; /* 减少内边距 */
-	      box-sizing:border-box;
-	    }
-	    .term-pane { 
-	      position:absolute; 
-	      inset:5px; /* 对应padding */
-	      overflow:hidden;
-	      width:calc(100% - 10px);
-	      height:calc(100% - 10px);
-	    }
+		      overscroll-behavior: contain;
+		      width:100%;
+		      max-width:100%;
+		      /* 底部不留内边距：让终端内容区域与下方触摸板紧贴，避免出现“空隙” */
+		      padding:5px 5px 0 5px;
+		      box-sizing:border-box;
+		    }
+		    .term-pane { 
+		      position:absolute; 
+		      /* 底部不留空：让终端内容区域直接贴到触摸板上 */
+		      inset:5px 5px 0 5px;
+		      overflow:hidden;
+		      width:calc(100% - 10px);
+		      height:calc(100% - 5px);
+		    }
 
 	    /* 底部空白触控板：仅在触屏设备上显示，用于单指滑动移动光标 */
 	    #cursor-pad {
@@ -2088,9 +2090,9 @@
 	        const container = pane || termArea;
 	        const charWidth = 7.6;
 	        const lineHeight = 18;
-	        // pane 本身已扣除了 term-area 的 padding(5px*2=10px)，因此这里扣 10px 保持与旧逻辑一致。
-	        const availableWidth = container.clientWidth - 10;
-	        const availableHeight = container.clientHeight - 10;
+	        // pane 已按 CSS inset 扣掉边距，这里直接用 clientWidth/clientHeight，避免误差导致底部出现“空隙感”。
+	        const availableWidth = container.clientWidth;
+	        const availableHeight = container.clientHeight;
 	        
 	        const cols = Math.floor(availableWidth / charWidth);
 	        const rows = Math.floor(availableHeight / lineHeight);
