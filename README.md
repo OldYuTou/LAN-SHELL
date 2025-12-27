@@ -21,7 +21,9 @@
 - 指令集（预设命令）持久化：存储到 `data/command-sets.json`，便于多设备共享
 - 移动端手势：单指滑动发送方向键移动光标；二指点按复制“最后一次输出”；二指长按触发粘贴（无剪贴板权限时自动打开粘贴输入框）
 - 工具栏增强：新增 `UNDO`（发送 `Ctrl+U` 清空当前输入行，便于误粘贴后快速回退）
-- Git 管理页：长按右侧“指令集”按钮进入 Git 页面查看提交历史（支持用背景色区分是否已 push；点击条目可复制提交哈希）；若目录未初始化可提示执行 `git init`（为安全起见，根目录 `.` 与隐藏目录禁止打开）
+- Git 管理页：长按右侧“指令集”按钮进入 Git 页面查看提交历史（背景色区分是否已 push；点击条目可复制提交哈希；长按条目可执行 Reset/Revert）；若目录未初始化可提示执行 `git init`（为安全起见，根目录 `.` 与隐藏目录禁止打开）
+  - Reset（软/硬回退）：未推送提交可回退到任意未推送提交；已推送提交仅允许回退到“云端最新（上游分支 HEAD）”以实现本地与云端同步
+  - Revert：对历史提交生成“反做提交”（不改写历史），已推送提交也可执行；若产生冲突需在终端手动 `git revert --continue` / `git revert --abort`
 - 前端资源：静态页面 + PWA 资源（`public/`），并强制禁用缓存避免旧版本前端残留
 
 ## 快速开始
@@ -85,6 +87,8 @@ PORT=8080 ALLOW_ROOT=/home/you/work ALLOWED_CMDS="npm,node,ls,bash" npm start
 - `GET /api/git/info?cwd=...`：Git 状态信息（是否可用/是否为仓库/仓库根/分支）
 - `GET /api/git/commits?cwd=...&limit=...`：提交历史（含是否已推送的标记；依赖上游分支配置）
 - `POST /api/git/init`：在指定目录执行 `git init`（仅允许在 `ALLOW_ROOT` 内，且禁止 `.` 与隐藏目录）
+- `POST /api/git/reset`：对指定提交执行 `git reset --soft/--hard <commit>`（Reset 仅允许未推送提交，或“云端最新提交”）
+- `POST /api/git/revert`：对指定提交执行 `git revert` 生成新提交（允许已推送提交；工作区需无已跟踪的未提交改动）
 - `WS /ws/pty`：交互式终端 WebSocket（关键 query：`cwd`、`cols`、`rows`、`sessionId`、`clientId`）
 
 ## 目录结构
@@ -146,6 +150,11 @@ A LAN-friendly Web Shell built with Node.js. Open a web page in your browser to 
 - File browsing: List files/directories within a configured root (read-only listing)
 - One-shot command runner: `/api/run` streams output via SSE (restricted by an allowlist)
 - Persistent command sets: Stored in `data/command-sets.json` for sharing across devices
+- Mobile gestures: One-finger swipe sends arrow keys (cursor movement); two-finger tap copies the latest output; two-finger long-press triggers paste (falls back to a paste input modal if clipboard access is blocked)
+- Toolbar enhancement: `UNDO` button sends `Ctrl+U` to clear the current input line (useful after accidental pastes)
+- Git page: Long-press the “Command Sets” button to open a Git page showing commit history (background color indicates pushed/unpushed; tap a commit to copy its hash; long-press a commit for Reset/Revert). For safety, opening Git page is blocked for root `.` and hidden directories.
+  - Reset (soft/hard): Unpushed commits can be reset to any unpushed target; pushed commits can only be reset to the upstream HEAD (to sync local back to cloud)
+  - Revert: Creates a new “revert commit” (does not rewrite history), so pushed commits are allowed; conflicts must be resolved in terminal via `git revert --continue` / `git revert --abort`
 - Frontend assets: Static page + PWA assets in `public/`, with caching disabled to avoid stale UI logic
 
 ## Quick Start
@@ -205,6 +214,11 @@ PORT=8080 ALLOW_ROOT=/home/you/work ALLOWED_CMDS="npm,node,ls,bash" npm start
 - `DELETE /api/sessions`: Terminate all sessions
 - `GET /api/sessions/:id/history`: Fetch output history of a session
 - `DELETE /api/sessions/:id`: Terminate a session
+- `GET /api/git/info?cwd=...`: Git info (availability / repo / root / branch)
+- `GET /api/git/commits?cwd=...&limit=...`: Commit history (includes pushed/unpushed markers; depends on upstream config)
+- `POST /api/git/init`: Run `git init` in the target directory (only within `ALLOW_ROOT`, blocked for `.` and hidden dirs)
+- `POST /api/git/reset`: Run `git reset --soft/--hard <commit>` (allowed for unpushed commits, or upstream HEAD only)
+- `POST /api/git/revert`: Run `git revert` to create a new commit (pushed commits allowed; working tree must have no tracked changes)
 - `WS /ws/pty`: Interactive terminal WebSocket (key query params: `cwd`, `cols`, `rows`, `sessionId`, `clientId`)
 
 ## Project Layout
