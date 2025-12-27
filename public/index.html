@@ -273,6 +273,17 @@
 		      inset:5px 5px 0 5px;
 		      overflow:hidden;
 		      /* 绝对定位时由 inset 决定尺寸，避免同时指定 width/height 造成底部错误留白 */
+		      display:flex;
+		    }
+		    /* 修复部分移动端浏览器（如 Android Edge）出现“终端底部死区”：
+		       xterm 的 .xterm 可能按 rows 自然高度渲染，未撑满容器，导致底部留下可见但不可交互的空白带。 */
+		    .term-pane > .xterm {
+		      flex:1 1 auto;
+		      width:100%;
+		      height:100%;
+		    }
+		    .term-pane .xterm-viewport {
+		      height:100% !important;
 		    }
 
 	    /* 底部空白触控板：仅在触屏设备上显示，用于单指滑动移动光标 */
