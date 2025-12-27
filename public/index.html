@@ -272,8 +272,7 @@
 		      /* 底部不留空：让终端内容区域直接贴到触摸板上 */
 		      inset:5px 5px 0 5px;
 		      overflow:hidden;
-		      width:calc(100% - 10px);
-		      height:calc(100% - 5px);
+		      /* 绝对定位时由 inset 决定尺寸，避免同时指定 width/height 造成底部错误留白 */
 		    }
 
 	    /* 底部空白触控板：仅在触屏设备上显示，用于单指滑动移动光标 */
