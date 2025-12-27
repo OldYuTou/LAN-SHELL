@@ -19,6 +19,9 @@
 - 文件浏览：在限定根目录内浏览文件/目录（只读列目录信息）
 - 一次性命令运行：`/api/run` 以 SSE 方式实时返回输出（并受允许命令白名单限制）
 - 指令集（预设命令）持久化：存储到 `data/command-sets.json`，便于多设备共享
+- 移动端手势：单指滑动发送方向键移动光标；二指点按复制“最后一次输出”；二指长按触发粘贴（无剪贴板权限时自动打开粘贴输入框）
+- 工具栏增强：新增 `UNDO`（发送 `Ctrl+U` 清空当前输入行，便于误粘贴后快速回退）
+- Git 管理页：长按右侧“指令集”按钮进入 Git 页面查看提交历史（支持用背景色区分是否已 push；点击条目可复制提交哈希）；若目录未初始化可提示执行 `git init`（为安全起见，根目录 `.` 与隐藏目录禁止打开）
 - 前端资源：静态页面 + PWA 资源（`public/`），并强制禁用缓存避免旧版本前端残留
 
 ## 快速开始
@@ -79,6 +82,9 @@ PORT=8080 ALLOW_ROOT=/home/you/work ALLOWED_CMDS="npm,node,ls,bash" npm start
 - `DELETE /api/sessions`：终止全部会话
 - `GET /api/sessions/:id/history`：获取某会话历史输出
 - `DELETE /api/sessions/:id`：终止指定会话
+- `GET /api/git/info?cwd=...`：Git 状态信息（是否可用/是否为仓库/仓库根/分支）
+- `GET /api/git/commits?cwd=...&limit=...`：提交历史（含是否已推送的标记；依赖上游分支配置）
+- `POST /api/git/init`：在指定目录执行 `git init`（仅允许在 `ALLOW_ROOT` 内，且禁止 `.` 与隐藏目录）
 - `WS /ws/pty`：交互式终端 WebSocket（关键 query：`cwd`、`cols`、`rows`、`sessionId`、`clientId`）
 
 ## 目录结构
