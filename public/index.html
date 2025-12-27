@@ -1636,6 +1636,7 @@
 	    // 强制隐藏移动端地址栏和底部栏
 	    function forceMobileFullscreen() {
 	      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+	        let __lastAppliedViewportHeight = 0;
 	        // 设置视口高度
 	        const setViewportHeight = () => {
 	          // 优先使用 VisualViewport：iOS/Android 的软键盘弹出通常只会触发 visualViewport.resize，
@@ -1648,6 +1649,9 @@
 	          const MIN_VALID_H = 180;
 	          const height = (vvH >= MIN_VALID_H ? vvH : winH);
 	          if (!height) return;
+	          // 防抖：避免 visualViewport 的频繁微小抖动导致编辑器 refresh，从而出现“触底轻微回弹/跳动”
+	          if (__lastAppliedViewportHeight && Math.abs(height - __lastAppliedViewportHeight) < 2) return;
+	          __lastAppliedViewportHeight = height;
 
 	          const vh = (height * 0.01);
 	          document.documentElement.style.setProperty('--vh', `${vh}px`);
@@ -1668,7 +1672,9 @@
 	          const vv = window.visualViewport;
 	          if (vv) {
 	            vv.addEventListener('resize', setViewportHeight);
-	            vv.addEventListener('scroll', setViewportHeight);
+	            // 注意：Android Edge 上 visualViewport.scroll 可能在内容滚动时频繁触发，
+	            // 会导致 setViewportHeight -> refreshAllEditors，从而出现“触底轻微回弹/跳动”。
+	            // 键盘弹出/收起主要依赖 resize 已足够，因此不绑定 scroll。
 	          }
 	        } catch {}
 
