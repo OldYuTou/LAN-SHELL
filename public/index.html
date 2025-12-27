@@ -917,6 +917,19 @@
 		      background: rgba(26, 30, 44, 0.82);
 		      border-color: rgba(45, 140, 255, 0.20);
 		    }
+		    /* Git 提交状态：已推送 / 未推送 / 未知 */
+		    .cmdset-item.git-pushed {
+		      background: rgba(16, 185, 129, 0.12);
+		      border-color: rgba(16, 185, 129, 0.28);
+		    }
+		    .cmdset-item.git-unpushed {
+		      background: rgba(245, 158, 11, 0.12);
+		      border-color: rgba(245, 158, 11, 0.28);
+		    }
+		    .cmdset-item.git-unknown {
+		      background: rgba(148, 163, 184, 0.10);
+		      border-color: rgba(148, 163, 184, 0.22);
+		    }
 		    .cmdset-item .ico { width: 22px; text-align: center; opacity: 0.9; }
 		    .cmdset-item .name {
 		      flex: 1;
@@ -2809,7 +2822,10 @@
 			        infoBox.style.display = 'none';
 			        for (const c of commits) {
 			          const item = document.createElement('div');
-			          item.className = 'cmdset-item';
+			          let stClass = 'git-unknown';
+			          if (c.pushed === true) stClass = 'git-pushed';
+			          else if (c.pushed === false) stClass = 'git-unpushed';
+			          item.className = `cmdset-item ${stClass}`;
 			          item.innerHTML = `
 			            <span class="ico">⎇</span>
 			            <span class="name">${escapeHtml(c.subject || '(no subject)')}</span>
@@ -2884,11 +2900,12 @@
 			          const commitsResp = await fetchJson(`/api/git/commits?cwd=${encodeURIComponent(cwd)}&limit=80`);
 			          const branch = commitsResp?.branch ? `分支：${commitsResp.branch}` : '';
 			          const root = commitsResp?.repoRoot ? `仓库：${commitsResp.repoRoot}` : '';
+			          const upstream = commitsResp?.upstream ? `上游：${commitsResp.upstream}` : '上游：未配置';
 			          const header = `${branch}${branch && root ? ' · ' : ''}${root}`.trim();
 			          if (!commitsResp?.commits?.length) {
-			            setInfo(header ? `${header}（暂无提交）` : '暂无提交记录。');
+			            setInfo(header ? `${header}（暂无提交）\n${upstream}` : `暂无提交记录。\n${upstream}`);
 			          } else {
-			            setInfo(header || '提交历史');
+			            setInfo(`${header || '提交历史'}\n${upstream}\n提示：绿色=已推送，橙色=未推送，灰色=未知`);
 			          }
 			          renderCommits(commitsResp?.commits || []);
 			        } catch (e) {

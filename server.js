@@ -300,6 +300,16 @@ async function detectGitInfo(cwd) {
   return { gitAvailable: true, isRepo: true, repoRoot, branch };
 }
 
+async function detectUpstream(cwd) {
+  try {
+    const r = await execFileAsync('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
+    const upstream = String(r.stdout || '').trim();
+    return upstream || null;
+  } catch {
+    return null;
+  }
+}
+
 // Git info/commits/init (NO AUTH)
 app.get('/api/git/info', async (req, res) => {
   const r = resolveCwdFromReq(req, { queryKey: 'cwd' });
@@ -321,6 +331,8 @@ app.get('/api/git/commits', async (req, res) => {
     if (!info.gitAvailable) return res.json({ ok: true, cwd: r.cwd, gitAvailable: false, isRepo: false, commits: [] });
     if (!info.isRepo) return res.json({ ok: true, cwd: r.cwd, gitAvailable: true, isRepo: false, commits: [] });
 
+    const upstream = await detectUpstream(r.cwd); // may be null (no remote/upstream)
+
     const format = '%H%x1f%h%x1f%an%x1f%ad%x1f%s';
     const { stdout } = await execFileAsync('git', [
       '-C',
@@ -337,7 +349,7 @@ app.get('/api/git/commits', async (req, res) => {
       .map((s) => s.trimEnd())
       .filter(Boolean);
 
-    const commits = lines
+    let commits = lines
       .map((line) => line.split('\x1f'))
       .filter((parts) => parts.length >= 5)
       .map(([hash, shortHash, author, date, subject]) => ({
@@ -348,13 +360,41 @@ app.get('/api/git/commits', async (req, res) => {
         subject,
       }));
 
-    res.json({ ok: true, cwd: r.cwd, ...info, commits });
+    if (upstream) {
+      // unpushed: commits reachable from HEAD but not from upstream
+      // cap size to avoid accidental huge payloads in large-divergence repos
+      const { stdout: upStdout } = await execFileAsync('git', [
+        '-C',
+        r.cwd,
+        'rev-list',
+        '--max-count=5000',
+        `${upstream}..HEAD`,
+      ]);
+      const unpushed = new Set(
+        String(upStdout || '')
+          .split('\n')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      );
+      commits = commits.map((c) => ({
+        ...c,
+        pushed: !unpushed.has(c.hash),
+      }));
+    } else {
+      commits = commits.map((c) => ({
+        ...c,
+        pushed: null, // unknown: no upstream configured
+      }));
+    }
+
+    res.json({ ok: true, cwd: r.cwd, ...info, upstream, commits });
   } catch (e) {
     // 可能是“还没有任何提交”
     const msg = String(e?.stderr || e?.message || '');
     if (/does not have any commits|your current branch/i.test(msg)) {
       const info = await detectGitInfo(r.cwd);
-      return res.json({ ok: true, cwd: r.cwd, ...info, commits: [] });
+      const upstream = info?.isRepo ? await detectUpstream(r.cwd).catch(() => null) : null;
+      return res.json({ ok: true, cwd: r.cwd, ...info, upstream, commits: [] });
     }
     res.status(500).json({ error: e?.message || 'git log failed' });
   }
