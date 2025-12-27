@@ -382,6 +382,11 @@
 	        padding-bottom: env(safe-area-inset-bottom, 0px);
 	      }
 	    }
+
+	    /* 编辑器页面不需要底部触控板：让编辑器占满可用空间 */
+	    body.editor-active #cursor-pad {
+	      display: none !important;
+	    }
     
     .item { 
       padding:10px 12px; 
@@ -2768,6 +2773,9 @@
 
 	    function setActive(id) {
 	      activeId = id;
+	      const activeSession = sessions.find(s => s.id === id) || null;
+	      try { document.body.classList.toggle('editor-active', activeSession?.type === 'editor'); } catch {}
+
 	      sessions.forEach(s => {
 	        const active = s.id === id;
 	        s.tab.classList.toggle('active', active);
@@ -2780,7 +2788,7 @@
 
 	      // 切换到活动终端后，优先把积压输出快速刷新（避免切换后看到“卡住”）
 	      try {
-	        const s = sessions.find(s => s.id === id);
+	        const s = activeSession;
 	        if (s?.type === 'term') {
 	          if (s?._pendingTermWrites) flushTermWrites(s);
 	          if (s?._pendingTermWrites) scheduleTermFlush(s);
