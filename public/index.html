@@ -3954,9 +3954,7 @@
 			            if (!info) return;
 			            const lineH = (typeof cm.defaultTextHeight === 'function' ? cm.defaultTextHeight() : 18) || 18;
 			            const marginPx = Math.max(0, Number.parseInt(String(marginLines), 10) || 0) * lineH;
-			            const cursor = cm.getCursor?.();
-			            if (!cursor) return;
-			            const coords = cm.charCoords?.(cursor, 'local');
+			            const coords = cm.cursorCoords?.(null, 'local') || cm.charCoords?.(cm.getCursor?.(), 'local');
 			            if (!coords) return;
 
 			            const topEdge = marginPx;
@@ -3970,6 +3968,63 @@
 			              const delta = Math.min(lineH, coords.bottom - bottomEdge);
 			              cm.scrollTo(null, info.top + delta);
 			            }
+			          } catch {}
+			        }
+
+			        // 编辑器方向移动“节流/分帧”：
+			        // 触控板一次滑动可能产生大量 steps，如果同步循环执行，会出现“光标跑出屏幕后才突然跳回”的观感。
+			        // 这里把编辑器的方向移动拆到多帧里执行，让滚动能持续跟上光标。
+			        const editorArrowQueue = {
+			          esc: null,
+			          remaining: 0,
+			          raf: 0,
+			        };
+
+			        function pumpEditorArrowQueue() {
+			          try {
+			            editorArrowQueue.raf = 0;
+			            const s = getActive();
+			            if (!s || s.type !== 'editor' || !s.cm) {
+			              editorArrowQueue.remaining = 0;
+			              return;
+			            }
+			            const cm = s.cm;
+			            const map = {
+			              '\x1b[A': 'goLineUp',
+			              '\x1b[B': 'goLineDown',
+			              '\x1b[C': 'goCharRight',
+			              '\x1b[D': 'goCharLeft',
+			            };
+			            const cmd = map[editorArrowQueue.esc];
+			            if (!cmd) {
+			              editorArrowQueue.remaining = 0;
+			              return;
+			            }
+
+			            // 每帧最多移动 N 次，兼顾“跟手”与“平滑”
+			            const PER_FRAME = 3;
+			            const n = Math.min(PER_FRAME, editorArrowQueue.remaining);
+			            for (let i = 0; i < n; i += 1) {
+			              try { cm.execCommand(cmd); } catch {}
+			            }
+			            editorArrowQueue.remaining -= n;
+			            followEditorCursorSmoothly(cm, { marginLines: 1 });
+			            try { cm.focus(); } catch {}
+
+			            if (editorArrowQueue.remaining > 0) {
+			              editorArrowQueue.raf = requestAnimationFrame(pumpEditorArrowQueue);
+			            }
+			          } catch {}
+			        }
+
+			        function enqueueEditorArrow(esc, steps) {
+			          try {
+			            if (!steps) return;
+			            // 如果方向变了，重置队列（避免“先上后下”累计后延迟执行）
+			            if (editorArrowQueue.esc && editorArrowQueue.esc !== esc) editorArrowQueue.remaining = 0;
+			            editorArrowQueue.esc = esc;
+			            editorArrowQueue.remaining = Math.min(120, editorArrowQueue.remaining + Math.abs(steps));
+			            if (!editorArrowQueue.raf) editorArrowQueue.raf = requestAnimationFrame(pumpEditorArrowQueue);
 			          } catch {}
 			        }
 
@@ -4156,14 +4211,18 @@
 			            if (!steps) return;
 			            o.accum -= steps * STEP_PX;
 			            const key = steps > 0 ? '\x1b[C' : '\x1b[D';
-			            for (let i = 0; i < Math.abs(steps); i += 1) sendArrowSilent(key);
+			            const s = getActive();
+			            if (s?.type === 'editor') enqueueEditorArrow(key, steps);
+			            else for (let i = 0; i < Math.abs(steps); i += 1) sendArrowSilent(key);
 			          } else {
 			            o.accum += dy;
 			            const steps = Math.trunc(o.accum / STEP_PX);
 			            if (!steps) return;
 			            o.accum -= steps * STEP_PX;
 			            const key = steps > 0 ? '\x1b[B' : '\x1b[A';
-			            for (let i = 0; i < Math.abs(steps); i += 1) sendArrowSilent(key);
+			            const s = getActive();
+			            if (s?.type === 'editor') enqueueEditorArrow(key, steps);
+			            else for (let i = 0; i < Math.abs(steps); i += 1) sendArrowSilent(key);
 			          }
 			        }
 
