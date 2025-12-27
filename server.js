@@ -42,7 +42,8 @@ const ALLOWED_CMDS = (process.env.ALLOWED_CMDS || 'npm,node,yarn,pnpm,ls,bash')
 const HISTORY_MAX_CHARS = Number.parseInt(process.env.HISTORY_MAX_CHARS || '', 10) || 500000;
 
 const app = express();
-app.use(express.json({ limit: '1mb' }));
+// 文本编辑会走 JSON 上传内容，适当放宽上限；实际可编辑大小仍由 /api/file 的限制控制
+app.use(express.json({ limit: '8mb' }));
 
 // 指令集（预设命令）持久化：存到服务端文件，便于多设备共享（NO AUTH）
 const DATA_DIR = path.join(__dirname, 'data');
@@ -233,6 +234,106 @@ app.get('/api/fs', (req, res) => {
     return res.json({ cwd: target, root: ROOT, items });
   } catch (e) {
     return res.status(500).json({ error: e.message });
+  }
+});
+
+// 文本文件读取/保存（NO AUTH）
+// 说明：
+// - 仅用于“文本类文件”编辑，因此对最大文件大小与二进制内容做了限制
+// - 为了避免覆盖外部修改，PUT 支持带 mtimeMs 的乐观锁（不传则直接写入）
+const MAX_TEXT_FILE_BYTES = 2 * 1024 * 1024; // 2MB
+const BINARY_SNIFF_BYTES = 8 * 1024; // 8KB
+
+function resolvePathFromQuery(raw) {
+  const p = (raw ?? '.').toString();
+  const target = path.resolve(ROOT, p);
+  if (!withinRoot(target)) return { ok: false, error: 'out of root', target: null, raw: p };
+  return { ok: true, target, raw: p };
+}
+
+function looksBinary(buf) {
+  try {
+    if (!buf || !buf.length) return false;
+    const len = Math.min(buf.length, BINARY_SNIFF_BYTES);
+    for (let i = 0; i < len; i += 1) {
+      if (buf[i] === 0) return true;
+    }
+  } catch {}
+  return false;
+}
+
+app.get('/api/file', (req, res) => {
+  const r = resolvePathFromQuery(req.query.path);
+  if (!r.ok) return res.status(403).json({ error: r.error });
+
+  try {
+    const st = fs.statSync(r.target);
+    if (!st.isFile()) return res.status(400).json({ error: 'not a file' });
+    if (st.size > MAX_TEXT_FILE_BYTES) {
+      return res.status(413).json({ error: `file too large (>${MAX_TEXT_FILE_BYTES} bytes)` });
+    }
+    const buf = fs.readFileSync(r.target);
+    if (looksBinary(buf)) return res.status(415).json({ error: 'binary file not supported' });
+    const content = buf.toString('utf8');
+    return res.json({
+      ok: true,
+      path: r.target,
+      size: st.size,
+      mtimeMs: st.mtimeMs,
+      encoding: 'utf8',
+      content,
+    });
+  } catch (e) {
+    return res.status(500).json({ error: e?.message || 'read failed' });
+  }
+});
+
+app.put('/api/file', (req, res) => {
+  const body = req.body || {};
+  const r = resolvePathFromQuery(body.path);
+  if (!r.ok) return res.status(403).json({ error: r.error });
+
+  const content = body.content;
+  const providedMtimeMs = body.mtimeMs;
+  if (typeof content !== 'string') return res.status(400).json({ error: 'content must be string' });
+
+  const bytes = Buffer.byteLength(content, 'utf8');
+  if (bytes > MAX_TEXT_FILE_BYTES) return res.status(413).json({ error: `content too large (>${MAX_TEXT_FILE_BYTES} bytes)` });
+
+  try {
+    const exists = fs.existsSync(r.target);
+    if (exists) {
+      const st = fs.statSync(r.target);
+      if (!st.isFile()) return res.status(400).json({ error: 'not a file' });
+      if (st.size > MAX_TEXT_FILE_BYTES) {
+        return res.status(413).json({ error: `file too large (>${MAX_TEXT_FILE_BYTES} bytes)` });
+      }
+      if (providedMtimeMs !== undefined && providedMtimeMs !== null) {
+        const expected = Number.parseFloat(providedMtimeMs);
+        if (Number.isFinite(expected)) {
+          // mtimeMs 可能有小数；给 2ms 容差避免平台差异导致误判
+          if (Math.abs(st.mtimeMs - expected) > 2) {
+            return res.status(409).json({
+              error: 'file changed on disk',
+              currentMtimeMs: st.mtimeMs,
+            });
+          }
+        }
+      }
+    } else {
+      // 新建文件：确保父目录存在且在 ROOT 内
+      const parent = path.dirname(r.target);
+      if (!withinRoot(parent)) return res.status(403).json({ error: 'out of root' });
+      fs.mkdirSync(parent, { recursive: true });
+    }
+
+    const tmp = `${r.target}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, content, 'utf8');
+    fs.renameSync(tmp, r.target);
+    const st2 = fs.statSync(r.target);
+    return res.json({ ok: true, path: r.target, size: st2.size, mtimeMs: st2.mtimeMs });
+  } catch (e) {
+    return res.status(500).json({ error: e?.message || 'write failed' });
   }
 });
 

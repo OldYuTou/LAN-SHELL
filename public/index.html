@@ -52,6 +52,9 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/icon-192.png" />
   
   <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css">
+  <!-- 文本编辑器（CodeMirror 5）：行号、滚动、光标移动等基础能力 -->
+  <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.16/lib/codemirror.css">
+  <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.16/theme/material-darker.css">
   <style>
     :root { 
       --bg:#0f1115; 
@@ -284,6 +287,69 @@
 		    }
 		    .term-pane .xterm-viewport {
 		      height:100% !important;
+		    }
+
+		    /* 文本编辑器面板：与终端 pane 同级，复用 tabs/右侧内容区 */
+		    .editor-pane {
+		      position:absolute;
+		      inset:5px 5px 0 5px;
+		      overflow:hidden;
+		      display:flex;
+		      flex-direction:column;
+		      background:#0f1115;
+		      border:1px solid rgba(255,255,255,0.06);
+		      border-radius:10px;
+		    }
+		    .editor-toolbar {
+		      display:flex;
+		      align-items:center;
+		      gap:10px;
+		      padding:8px 10px;
+		      background:#1b2030;
+		      border-bottom:1px solid rgba(255,255,255,0.08);
+		      box-sizing:border-box;
+		    }
+		    .editor-title {
+		      flex:1;
+		      min-width:0;
+		      font-size:13px;
+		      color:rgba(255,255,255,0.85);
+		      white-space:nowrap;
+		      overflow:hidden;
+		      text-overflow:ellipsis;
+		    }
+		    .editor-actions {
+		      display:flex;
+		      gap:8px;
+		    }
+		    .mini-btn {
+		      padding:8px 10px;
+		      border-radius:10px;
+		      font-size:12px;
+		      font-weight:700;
+		      background:rgba(45, 140, 255, 0.92);
+		      border:1px solid rgba(45, 140, 255, 0.55);
+		      color:#fff;
+		    }
+		    .mini-btn.secondary {
+		      background:rgba(255,255,255,0.08);
+		      border-color:rgba(255,255,255,0.12);
+		      color:rgba(255,255,255,0.9);
+		    }
+		    .mini-btn.danger {
+		      background:rgba(255, 80, 80, 0.24);
+		      border-color:rgba(255, 80, 80, 0.60);
+		      color:#ff6b6b;
+		    }
+		    .editor-body {
+		      flex:1;
+		      min-height:0;
+		      overflow:hidden;
+		    }
+		    .editor-pane .CodeMirror {
+		      height:100%;
+		      font-size:13px;
+		      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 		    }
 
 	    /* 底部空白触控板：仅在触屏设备上显示，用于单指滑动移动光标 */
@@ -1356,6 +1422,7 @@
 			  <script src="https://unpkg.com/xterm/lib/xterm.js"></script>
 			  <!-- 可选：WebGL 渲染加速（加载失败时自动降级） -->
 			  <script src="https://unpkg.com/xterm-addon-webgl/lib/xterm-addon-webgl.js"></script>
+			  <script src="https://unpkg.com/codemirror@5.65.16/lib/codemirror.js"></script>
 			  <script>
     // PWA全屏和隐藏地址栏功能
     function hideAddressBar() {
@@ -1794,6 +1861,8 @@
         sessions.forEach(session => {
           if (session.resizeTerminal) {
             session.resizeTerminal();
+          } else if (session.type === 'editor') {
+            try { session.cm?.refresh?.(); } catch {}
           }
         });
       }, 350); // 等待CSS动画完成
@@ -1806,6 +1875,24 @@
 	      if (e.ctrlKey && e.key === 'b') {
 	        e.preventDefault();
 	        toggleBtn.click();
+	      }
+
+	      // 编辑器快捷键：Ctrl+S 保存，Ctrl+W 关闭
+	      if (e.ctrlKey && (e.key === 's' || e.key === 'S')) {
+	        const s = getActive();
+	        if (s?.type === 'editor') {
+	          e.preventDefault();
+	          saveEditorFile(s).catch(() => {});
+	          return;
+	        }
+	      }
+	      if (e.ctrlKey && (e.key === 'w' || e.key === 'W')) {
+	        const s = getActive();
+	        if (s?.type === 'editor') {
+	          e.preventDefault();
+	          closeEditor(s.id);
+	          return;
+	        }
 	      }
 	      
 	      // 手机端额外快捷键
@@ -1911,7 +1998,15 @@
           } else if (it.isExe) {
             const confirmed = confirm(`在 ${data.cwd} 运行 ./${it.name} ?`);
             if (confirmed) createTerminal(data.cwd, `./${it.name}`);
+          } else {
+            // 桌面端：双击打开更符合习惯；移动端没有双击概念，因此单击也打开
+            openEditor(join(data.cwd, it.name));
           }
+        };
+
+        // 桌面端双击打开文件编辑器（不影响目录单击进入）
+        div.ondblclick = () => {
+          if (!it.isDir && !it.isExe) openEditor(join(data.cwd, it.name));
         };
         list.appendChild(div);
       });
@@ -1921,6 +2016,256 @@
       if (base === '/') return `/${name}`;
       return base.replace(/\/$/, '') + '/' + name;
     }
+
+	    // -----------------------
+	    // 文本编辑器（CodeMirror）
+	    // -----------------------
+	    let editorCounter = 1;
+
+	    function basename(p) {
+	      try {
+	        const s = String(p || '');
+	        const i = s.lastIndexOf('/');
+	        return i >= 0 ? s.slice(i + 1) : s;
+	      } catch {
+	        return String(p || '');
+	      }
+	    }
+
+	    function findEditorByPath(filePath) {
+	      return sessions.find(s => s?.type === 'editor' && s.filePath === filePath);
+	    }
+
+	    function updateEditorTabTitle(s) {
+	      if (!s?.tab) return;
+	      const title = s.displayName || basename(s.filePath);
+	      // tab 的结构是：文本节点 + close span；这里直接改第一个 child 的 textContent 更稳定
+	      try {
+	        const textNode = s.tab.childNodes?.[0];
+	        if (textNode) textNode.textContent = s.dirty ? `${title} *` : title;
+	        else s.tab.textContent = s.dirty ? `${title} *` : title;
+	      } catch {
+	        s.tab.textContent = s.dirty ? `${title} *` : title;
+	      }
+	    }
+
+	    async function loadEditorFile(s) {
+	      if (!s?.filePath) return false;
+	      try {
+	        const res = await fetch(`/api/file?path=${encodeURIComponent(s.filePath)}&token=${encodeURIComponent(authToken)}`);
+	        if (!res.ok) {
+	          let msg = `打开失败（${res.status}）`;
+	          try {
+	            const j = await res.json();
+	            if (j?.error) msg = `打开失败：${j.error}`;
+	          } catch {}
+	          showToast(`❌ ${msg}`);
+	          return false;
+	        }
+	        const data = await res.json();
+	        s._suppressDirty = true;
+	        s.cm.setValue(data?.content ?? '');
+	        s.cm.setCursor({ line: 0, ch: 0 });
+	        s.cm.scrollTo(0, 0);
+	        s._suppressDirty = false;
+	        s.dirty = false;
+	        s.mtimeMs = data?.mtimeMs;
+	        s.size = data?.size;
+	        updateEditorTabTitle(s);
+	        try { s.titleEl.textContent = data?.path || s.filePath; } catch {}
+	        return true;
+	      } catch (e) {
+	        showToast(`❌ 打开失败：${e?.message || e}`);
+	        return false;
+	      }
+	    }
+
+	    async function saveEditorFile(s, { force = false } = {}) {
+	      if (!s?.filePath || !s?.cm) return false;
+	      try {
+	        const payload = {
+	          path: s.filePath,
+	          content: s.cm.getValue(),
+	        };
+	        if (!force) payload.mtimeMs = s.mtimeMs;
+
+	        const res = await fetch(`/api/file?token=${encodeURIComponent(authToken)}`, {
+	          method: 'PUT',
+	          headers: { 'Content-Type': 'application/json' },
+	          body: JSON.stringify(payload),
+	        });
+
+	        if (res.status === 409) {
+	          // 乐观锁冲突：提示覆盖或重载
+	          let currentMtimeMs = null;
+	          try {
+	            const j = await res.json();
+	            currentMtimeMs = j?.currentMtimeMs ?? null;
+	          } catch {}
+	          const ok = confirm('文件已在磁盘上被修改。\n\n“确定”=强制覆盖保存\n“取消”=不保存（建议点“重载”再对比）');
+	          if (ok) return await saveEditorFile(s, { force: true });
+	          showToast('⚠️ 已取消保存');
+	          return false;
+	        }
+
+	        if (!res.ok) {
+	          let msg = `保存失败（${res.status}）`;
+	          try {
+	            const j = await res.json();
+	            if (j?.error) msg = `保存失败：${j.error}`;
+	          } catch {}
+	          showToast(`❌ ${msg}`);
+	          return false;
+	        }
+
+	        const data = await res.json();
+	        s.dirty = false;
+	        s.mtimeMs = data?.mtimeMs;
+	        s.size = data?.size;
+	        updateEditorTabTitle(s);
+	        showToast('✅ 已保存');
+	        return true;
+	      } catch (e) {
+	        showToast(`❌ 保存失败：${e?.message || e}`);
+	        return false;
+	      }
+	    }
+
+	    function removeEditor(id) {
+	      const idx = sessions.findIndex(s => s.id === id);
+	      if (idx === -1) return;
+	      const s = sessions[idx];
+	      try { s.cm?.toTextArea?.(); } catch {}
+	      try { s.pane?.remove?.(); } catch {}
+	      try { s.tab?.remove?.(); } catch {}
+	      sessions.splice(idx, 1);
+	      if (activeId === id) {
+	        if (sessions.length) setActive(sessions[0].id);
+	        else activeId = null;
+	      }
+	    }
+
+	    function closeEditor(id) {
+	      const s = sessions.find(s => s.id === id);
+	      if (!s) return;
+	      if (s.dirty) {
+	        const ok = confirm('文件尚未保存，确定关闭吗？');
+	        if (!ok) return;
+	      }
+	      removeEditor(id);
+	    }
+
+	    async function openEditor(filePath) {
+	      const existing = findEditorByPath(filePath);
+	      if (existing) {
+	        setActive(existing.id);
+	        try { existing.cm.focus(); } catch {}
+	        return existing;
+	      }
+
+	      if (typeof CodeMirror !== 'function') {
+	        showToast('❌ 编辑器组件未加载（请检查网络/CDN）');
+	        return null;
+	      }
+
+	      const id = `edit-${editorCounter++}`;
+	      const tabs = document.getElementById('tabs');
+	      const tab = document.createElement('div');
+	      tab.className = 'tab';
+	      tab.appendChild(document.createTextNode(basename(filePath)));
+	      const close = document.createElement('span');
+	      close.className = 'close';
+	      close.textContent = '×';
+	      close.onclick = (e) => { e.stopPropagation(); closeEditor(id); };
+	      tab.appendChild(close);
+	      tab.onclick = () => setActive(id);
+	      tabs.appendChild(tab);
+
+	      const pane = document.createElement('div');
+	      pane.className = 'editor-pane';
+	      const toolbar = document.createElement('div');
+	      toolbar.className = 'editor-toolbar';
+	      const titleEl = document.createElement('div');
+	      titleEl.className = 'editor-title';
+	      titleEl.textContent = filePath;
+	      const actions = document.createElement('div');
+	      actions.className = 'editor-actions';
+	      const saveBtn = document.createElement('button');
+	      saveBtn.className = 'mini-btn';
+	      saveBtn.textContent = '保存';
+	      const reloadBtn = document.createElement('button');
+	      reloadBtn.className = 'mini-btn secondary';
+	      reloadBtn.textContent = '重载';
+	      const closeBtn = document.createElement('button');
+	      closeBtn.className = 'mini-btn danger';
+	      closeBtn.textContent = '关闭';
+	      actions.appendChild(saveBtn);
+	      actions.appendChild(reloadBtn);
+	      actions.appendChild(closeBtn);
+	      toolbar.appendChild(titleEl);
+	      toolbar.appendChild(actions);
+	      const body = document.createElement('div');
+	      body.className = 'editor-body';
+	      pane.appendChild(toolbar);
+	      pane.appendChild(body);
+	      document.getElementById('term-area').appendChild(pane);
+
+	      const cm = CodeMirror(body, {
+	        value: '',
+	        lineNumbers: true,
+	        theme: 'material-darker',
+	        indentUnit: 2,
+	        tabSize: 2,
+	        lineWrapping: false,
+	        viewportMargin: 20,
+	      });
+
+	      const session = {
+	        type: 'editor',
+	        id,
+	        filePath,
+	        displayName: basename(filePath),
+	        tab,
+	        pane,
+	        cm,
+	        titleEl,
+	        dirty: false,
+	        _suppressDirty: false,
+	        mtimeMs: null,
+	        size: null,
+	      };
+	      sessions.push(session);
+
+	      cm.on('change', () => {
+	        if (session._suppressDirty) return;
+	        if (!session.dirty) {
+	          session.dirty = true;
+	          updateEditorTabTitle(session);
+	        }
+	      });
+
+	      saveBtn.onclick = async (e) => { e.preventDefault(); e.stopPropagation(); await saveEditorFile(session); };
+	      reloadBtn.onclick = async (e) => {
+	        e.preventDefault();
+	        e.stopPropagation();
+	        if (session.dirty) {
+	          const ok = confirm('当前有未保存修改，仍要重载吗？');
+	          if (!ok) return;
+	        }
+	        await loadEditorFile(session);
+	      };
+	      closeBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); closeEditor(id); };
+
+	      setActive(id);
+	      const ok = await loadEditorFile(session);
+	      if (!ok) {
+	        // 打开失败时自动回收 tab/pane，避免留下空白窗口
+	        removeEditor(id);
+	        return null;
+	      }
+	      try { cm.focus(); } catch {}
+	      return session;
+	    }
 
 	    // 将后端 PTY 输出做“合帧/合批”写入，避免长对话下高频 term.write 导致滚动卡顿
 	    function isTermAtBottom(term) {
@@ -2181,6 +2526,7 @@
 	      } catch {}
 
 			      const session = { 
+			        type: 'term',
 			        id, cwd, term, pane, tab, ws: null, inputDisposable: null, 
 			        autorun: autorunCmd,
 			        resizeObserver,
@@ -2414,8 +2760,14 @@
 	      // 切换到活动终端后，优先把积压输出快速刷新（避免切换后看到“卡住”）
 	      try {
 	        const s = sessions.find(s => s.id === id);
-	        if (s?._pendingTermWrites) flushTermWrites(s);
-	        if (s?._pendingTermWrites) scheduleTermFlush(s);
+	        if (s?.type === 'term') {
+	          if (s?._pendingTermWrites) flushTermWrites(s);
+	          if (s?._pendingTermWrites) scheduleTermFlush(s);
+	          try { s.term?.focus?.(); } catch {}
+	        } else if (s?.type === 'editor') {
+	          try { s.cm?.refresh?.(); } catch {}
+	          try { s.cm?.focus?.(); } catch {}
+	        }
 	      } catch {}
 
 	    }
@@ -2423,6 +2775,14 @@
 	    function getActive() {
 	      return sessions.find(s => s.id === activeId);
 	    }
+
+	    // 编辑器在容器尺寸变化时需要 refresh，否则可能出现空白/高度不正确（尤其是移动端旋转/软键盘弹出）
+	    window.addEventListener('resize', () => {
+	      try {
+	        const s = getActive();
+	        if (s?.type === 'editor') s.cm?.refresh?.();
+	      } catch {}
+	    });
 
 		    function getLatestNonEmptyLine(term) {
 		      try {
@@ -3559,6 +3919,10 @@
 
 			      function sendToTerminal(data, okMsg) {
 			        const s = getActive();
+			        if (s?.type === 'editor') {
+			          showToast('⚠️ 当前是编辑器窗口，请切换到终端窗口再发送按键');
+			          return;
+			        }
 			        if (!s?.ws || s.ws.readyState !== 1) {
 			          showToast('❌ 终端未连接');
 			          return;
@@ -3583,14 +3947,53 @@
 			          multi: null,
 			        };
 
-			        function sendToTerminalSilent(data) {
+			        function sendArrowSilent(esc) {
 			          const s = getActive();
-			          if (!s?.ws || s.ws.readyState !== 1) {
-			            showToast('❌ 终端未连接');
-			            return false;
+			          if (!s) return false;
+
+			          // 编辑器：把方向键映射为 CodeMirror 光标移动，并自动滚动到光标
+			          if (s.type === 'editor') {
+			            const cm = s.cm;
+			            if (!cm) return false;
+			            const map = {
+			              '\x1b[A': 'goLineUp',
+			              '\x1b[B': 'goLineDown',
+			              '\x1b[C': 'goCharRight',
+			              '\x1b[D': 'goCharLeft',
+			            };
+			            const cmd = map[esc];
+			            if (!cmd) return false;
+			            try {
+			              cm.execCommand(cmd);
+			              cm.scrollIntoView(cm.getCursor(), 80);
+			              cm.focus();
+			            } catch {}
+			            return true;
 			          }
-			          try { s.ws.send(data); } catch { return false; }
-			          return true;
+
+			          // 终端：发送真实方向键序列
+			          if (s.type === 'term') {
+			            if (!s.ws || s.ws.readyState !== 1) {
+			              showToast('❌ 终端未连接');
+			              return false;
+			            }
+			            try { s.ws.send(esc); } catch { return false; }
+			            return true;
+			          }
+
+			          return false;
+			        }
+
+			        function fireCopyIfTerminal() {
+			          const s = getActive();
+			          if (s?.type !== 'term') return;
+			          try { onCopy?.(); } catch {}
+			        }
+
+			        function firePasteIfTerminal() {
+			          const s = getActive();
+			          if (s?.type !== 'term') return;
+			          try { onPaste?.(); } catch {}
 			        }
 
 			        function dist(x1, y1, x2, y2) {
@@ -3643,7 +4046,7 @@
 			                m.longPressFired = true;
 			                // 长按已触发：不再将其判定为“二指点按复制”
 			                m.cancelled = true;
-			                try { onPaste?.(); } catch {}
+			                firePasteIfTerminal();
 			              }, LONG_PRESS_MS);
 			            } catch {}
 			          }
@@ -3690,7 +4093,7 @@
 			          state.multi = null;
 			          if (!ok) return;
 			          if (count === 2) {
-			            try { onCopy?.(); } catch {}
+			            fireCopyIfTerminal();
 			          }
 			        }
 
@@ -3727,14 +4130,14 @@
 			            if (!steps) return;
 			            o.accum -= steps * STEP_PX;
 			            const key = steps > 0 ? '\x1b[C' : '\x1b[D';
-			            for (let i = 0; i < Math.abs(steps); i += 1) sendToTerminalSilent(key);
+			            for (let i = 0; i < Math.abs(steps); i += 1) sendArrowSilent(key);
 			          } else {
 			            o.accum += dy;
 			            const steps = Math.trunc(o.accum / STEP_PX);
 			            if (!steps) return;
 			            o.accum -= steps * STEP_PX;
 			            const key = steps > 0 ? '\x1b[B' : '\x1b[A';
-			            for (let i = 0; i < Math.abs(steps); i += 1) sendToTerminalSilent(key);
+			            for (let i = 0; i < Math.abs(steps); i += 1) sendArrowSilent(key);
 			          }
 			        }
 

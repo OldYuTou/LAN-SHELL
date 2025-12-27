@@ -12,3 +12,6 @@ out/
 测试关闭服务.sh
 测试启动服务.sh
 *.txt
+*.zip
+*.bundle
+core.*

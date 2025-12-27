@@ -17,6 +17,7 @@
 - 交互式终端：浏览器通过 WebSocket 连接服务端 `node-pty`，获得完整交互体验
 - 终端会话管理：支持重连、查看会话列表、查看历史输出、终止会话/清空所有会话
 - 文件浏览：在限定根目录内浏览文件/目录（只读列目录信息）
+- 文本编辑：在左侧文件列表点击/双击文本文件，在右侧以“文件名 Tab”打开编辑器；支持行号、保存/重载、触控板手势方向键移动光标并自动滚动到光标
 - 一次性命令运行：`/api/run` 以 SSE 方式实时返回输出（并受允许命令白名单限制）
 - 指令集（预设命令）持久化：存储到 `data/command-sets.json`，便于多设备共享
 - 移动端手势：终端区域单指滑动用于滚动；底部空白区域单指滑动发送方向键移动光标；二指点按复制“最后一次输出”；二指长按触发粘贴（无剪贴板权限时自动打开粘贴输入框）
@@ -148,6 +149,7 @@ A LAN-friendly Web Shell built with Node.js. Open a web page in your browser to 
 - Interactive terminal: Browser connects to `node-pty` over WebSocket for a full interactive experience
 - Session management: Reconnect, list sessions, fetch output history, terminate a session / terminate all sessions
 - File browsing: List files/directories within a configured root (read-only listing)
+- Text editor: Tap/double-click a text file in the left panel to open an editor tab on the right, with line numbers, save/reload, and cursor-pad swipe to move the caret (auto-scroll into view)
 - One-shot command runner: `/api/run` streams output via SSE (restricted by an allowlist)
 - Persistent command sets: Stored in `data/command-sets.json` for sharing across devices
 - Mobile gestures: One-finger swipe inside the terminal scrolls; one-finger swipe on the bottom blank area sends arrow keys (cursor movement); two-finger tap copies the latest output; two-finger long-press triggers paste (falls back to a paste input modal if clipboard access is blocked)
