@@ -3947,6 +3947,32 @@
 			          multi: null,
 			        };
 
+			        function followEditorCursorSmoothly(cm, { marginLines = 1 } = {}) {
+			          try {
+			            if (!cm) return;
+			            const info = cm.getScrollInfo?.();
+			            if (!info) return;
+			            const lineH = (typeof cm.defaultTextHeight === 'function' ? cm.defaultTextHeight() : 18) || 18;
+			            const marginPx = Math.max(0, Number.parseInt(String(marginLines), 10) || 0) * lineH;
+			            const cursor = cm.getCursor?.();
+			            if (!cursor) return;
+			            const coords = cm.charCoords?.(cursor, 'local');
+			            if (!coords) return;
+
+			            const topEdge = marginPx;
+			            const bottomEdge = info.clientHeight - marginPx;
+
+			            // 只在光标触碰到可视区域边缘后“跟随滚动”，且每次最多滚动 1 行高度，避免跳行眩晕
+			            if (coords.top < topEdge) {
+			              const delta = Math.min(lineH, topEdge - coords.top);
+			              cm.scrollTo(null, Math.max(0, info.top - delta));
+			            } else if (coords.bottom > bottomEdge) {
+			              const delta = Math.min(lineH, coords.bottom - bottomEdge);
+			              cm.scrollTo(null, info.top + delta);
+			            }
+			          } catch {}
+			        }
+
 			        function sendArrowSilent(esc) {
 			          const s = getActive();
 			          if (!s) return false;
@@ -3965,7 +3991,7 @@
 			            if (!cmd) return false;
 			            try {
 			              cm.execCommand(cmd);
-			              cm.scrollIntoView(cm.getCursor(), 80);
+			              followEditorCursorSmoothly(cm, { marginLines: 1 });
 			              cm.focus();
 			            } catch {}
 			            return true;
