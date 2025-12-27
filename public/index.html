@@ -1090,6 +1090,9 @@
 		      <button id="orientationLockBtn" title="旋转：锁定竖屏/允许旋转">
 		        <span class="k">ROT</span>
 		      </button>
+		      <button id="undoBtn" title="撤回（发送 Ctrl+U 清空当前输入行）">
+		        <span class="k">UNDO</span>
+		      </button>
 			      <button id="tabBtn" title="Tab">
 			        <span class="k">TAB</span>
 			      </button>
@@ -2958,6 +2961,7 @@
 				      const ctrlToggleBtn = document.getElementById('ctrlToggleBtn');
 				      const altToggleBtn = document.getElementById('altToggleBtn');
 				      const comboBtn = document.getElementById('comboFloatingBtn');
+				      const undoBtn = document.getElementById('undoBtn');
 				      const tabBtn = document.getElementById('tabBtn');
 				      const enterBtn = document.getElementById('enterBtn');
 				      const continueBtn = document.getElementById('continueBtn');
@@ -2972,7 +2976,7 @@
 				      const pasteInput = document.getElementById('paste-input');
 
 				      if (!toggleBtn || !floatingCmdBtn || !drawer || !backdrop || !closeBtn) return;
-					      if (!orientationBtn || !comboBtn || !tabBtn || !enterBtn || !continueBtn || !escBtn || !ctrlCBtn) return;
+					      if (!orientationBtn || !undoBtn || !comboBtn || !tabBtn || !enterBtn || !continueBtn || !escBtn || !ctrlCBtn) return;
 					      if (!pasteModalBackdrop || !pasteModal || !pasteModalCloseBtn || !pasteModalCancelBtn || !pasteModalOkBtn || !pasteInput) return;
 
 				      // 旋转锁：无法读取“系统旋转锁”状态，只提供 App 内开关（PWA 默认启用竖屏锁）
@@ -3135,6 +3139,13 @@
 				      try {
 				        window.__lanShellQuickActions = { copyLastOutput, pasteClipboard };
 				      } catch {}
+
+				      // 撤回：终端没有通用“撤销”，这里提供最常用的 Ctrl+U（清空当前输入行）
+				      undoBtn.onclick = (e) => {
+				        e.preventDefault();
+				        e.stopPropagation();
+				        sendToTerminal('\x15', '✅ 已发送撤回（Ctrl+U）');
+				      };
 
 			      function openDrawer() {
 			        try {
