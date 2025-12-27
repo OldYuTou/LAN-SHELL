@@ -19,7 +19,7 @@
 - 文件浏览：在限定根目录内浏览文件/目录（只读列目录信息）
 - 一次性命令运行：`/api/run` 以 SSE 方式实时返回输出（并受允许命令白名单限制）
 - 指令集（预设命令）持久化：存储到 `data/command-sets.json`，便于多设备共享
-- 移动端手势：单指滑动发送方向键移动光标；二指点按复制“最后一次输出”；二指长按触发粘贴（无剪贴板权限时自动打开粘贴输入框）
+- 移动端手势：终端区域单指滑动用于滚动；底部空白区域单指滑动发送方向键移动光标；二指点按复制“最后一次输出”；二指长按触发粘贴（无剪贴板权限时自动打开粘贴输入框）
 - 工具栏增强：新增 `UNDO`（发送 `Ctrl+U` 清空当前输入行，便于误粘贴后快速回退）
 - Git 管理页：长按右侧“指令集”按钮进入 Git 页面查看提交历史（背景色区分是否已 push；点击条目可复制提交哈希；长按条目可执行 Reset/Revert）；若目录未初始化可提示执行 `git init`（为安全起见，根目录 `.` 与隐藏目录禁止打开）
   - Reset（软/硬回退）：未推送提交可回退到任意未推送提交；已推送提交仅允许回退到“云端最新（上游分支 HEAD）”以实现本地与云端同步
@@ -150,7 +150,7 @@ A LAN-friendly Web Shell built with Node.js. Open a web page in your browser to 
 - File browsing: List files/directories within a configured root (read-only listing)
 - One-shot command runner: `/api/run` streams output via SSE (restricted by an allowlist)
 - Persistent command sets: Stored in `data/command-sets.json` for sharing across devices
-- Mobile gestures: One-finger swipe sends arrow keys (cursor movement); two-finger tap copies the latest output; two-finger long-press triggers paste (falls back to a paste input modal if clipboard access is blocked)
+- Mobile gestures: One-finger swipe inside the terminal scrolls; one-finger swipe on the bottom blank area sends arrow keys (cursor movement); two-finger tap copies the latest output; two-finger long-press triggers paste (falls back to a paste input modal if clipboard access is blocked)
 - Toolbar enhancement: `UNDO` button sends `Ctrl+U` to clear the current input line (useful after accidental pastes)
 - Git page: Long-press the “Command Sets” button to open a Git page showing commit history (background color indicates pushed/unpushed; tap a commit to copy its hash; long-press a commit for Reset/Revert). For safety, opening Git page is blocked for root `.` and hidden directories.
   - Reset (soft/hard): Unpushed commits can be reset to any unpushed target; pushed commits can only be reset to the upstream HEAD (to sync local back to cloud)
