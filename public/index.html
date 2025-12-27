@@ -285,9 +285,16 @@
 	      user-select:none;
 	      -webkit-user-select:none;
 	      -webkit-touch-callout:none;
+	      box-sizing:border-box;
 	    }
 	    @media (pointer: coarse) {
-	      #cursor-pad { display:block; }
+	      #cursor-pad {
+	        display:block;
+	        /* 触屏设备上尽量把“终端下方的空白”分配给光标触控板，提升可用面积 */
+	        height: clamp(64px, 18vh, 240px);
+	        /* iOS 底部安全区也并入触控板区域，避免出现“看得见但摸不到”的空白 */
+	        padding-bottom: env(safe-area-inset-bottom, 0px);
+	      }
 	    }
     
     .item { 
