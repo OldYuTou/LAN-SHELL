@@ -2820,16 +2820,29 @@
 			        clearList();
 			        if (!Array.isArray(commits) || !commits.length) return;
 			        infoBox.style.display = 'none';
+			        const fmtTime = (iso) => {
+			          try {
+			            const d = new Date(iso);
+			            if (!Number.isFinite(d.getTime())) return '';
+			            const pad = (n) => String(n).padStart(2, '0');
+			            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+			          } catch {
+			            return '';
+			          }
+			        };
 			        for (const c of commits) {
 			          const item = document.createElement('div');
 			          let stClass = 'git-unknown';
 			          if (c.pushed === true) stClass = 'git-pushed';
 			          else if (c.pushed === false) stClass = 'git-unpushed';
 			          item.className = `cmdset-item ${stClass}`;
+			          const author = String(c.author || '').trim();
+			          const time = fmtTime(c.date);
+			          const meta = [time, author].filter(Boolean).join(' · ');
 			          item.innerHTML = `
 			            <span class="ico">⎇</span>
 			            <span class="name">${escapeHtml(c.subject || '(no subject)')}</span>
-			            <span class="meta">${escapeHtml((c.shortHash || '').trim())} · ${escapeHtml((c.author || '').trim())}</span>
+			            <span class="meta">${escapeHtml(meta || '')}</span>
 			          `;
 			          item.onclick = async (e) => {
 			            e.preventDefault();
