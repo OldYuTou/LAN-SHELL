@@ -2771,7 +2771,11 @@
 	      sessions.forEach(s => {
 	        const active = s.id === id;
 	        s.tab.classList.toggle('active', active);
-	        s.pane.style.display = active ? 'block' : 'none';
+	        // 不同面板类型的 display 不能一刀切：
+	        // - editor-pane 依赖 flex 布局（否则 editor-body 的高度计算会失效，表现为“看不到编辑器”）
+	        // - term-pane 用 block/flex 都能工作，这里保持 block
+	        if (active) s.pane.style.display = (s.type === 'editor') ? 'flex' : 'block';
+	        else s.pane.style.display = 'none';
 	      });
 
 	      // 切换到活动终端后，优先把积压输出快速刷新（避免切换后看到“卡住”）
