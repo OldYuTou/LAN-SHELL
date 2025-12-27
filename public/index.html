@@ -1263,6 +1263,7 @@
 			    <div id="gitResetDesc" class="desc"></div>
 			    <div class="actions">
 			      <button id="gitResetCancelBtn">取消</button>
+			      <button id="gitRevertBtn">Revert</button>
 			      <button id="gitResetSoftBtn" class="primary">软回退</button>
 			      <button id="gitResetHardBtn" class="danger">硬回退</button>
 			    </div>
@@ -2863,11 +2864,12 @@
 			      const resetModal = document.getElementById('git-reset-modal');
 			      const resetCloseBtn = document.getElementById('gitResetCloseBtn');
 			      const resetCancelBtn = document.getElementById('gitResetCancelBtn');
+			      const revertBtn = document.getElementById('gitRevertBtn');
 			      const resetSoftBtn = document.getElementById('gitResetSoftBtn');
 			      const resetHardBtn = document.getElementById('gitResetHardBtn');
 			      const resetDesc = document.getElementById('gitResetDesc');
 			      if (!page || !backBtn || !refreshBtn || !cwdText || !infoBox || !listEl) return;
-			      if (!resetBackdrop || !resetModal || !resetCloseBtn || !resetCancelBtn || !resetSoftBtn || !resetHardBtn || !resetDesc) return;
+			      if (!resetBackdrop || !resetModal || !resetCloseBtn || !resetCancelBtn || !revertBtn || !resetSoftBtn || !resetHardBtn || !resetDesc) return;
 
 			      const state = {
 			        loading: false,
@@ -3066,7 +3068,8 @@
 			        resetDesc.textContent =
 			          `将回退到该提交：${subj}\n\n` +
 			          `软回退：仅移动指针到该提交，不改动工作区文件（差异会保留为暂存区/待提交状态）。\n` +
-			          `硬回退：指针与工作区文件一起回到该提交（会丢弃未提交的工作区改动）。`;
+			          `硬回退：指针与工作区文件一起回到该提交（会丢弃未提交的工作区改动）。\n` +
+			          `Revert：生成一个新的提交来反做该提交的改动（更安全，但可能产生冲突）。`;
 			        resetBackdrop.classList.add('open');
 			        resetModal.classList.add('open');
 			        resetBackdrop.setAttribute('aria-hidden', 'false');
@@ -3103,6 +3106,29 @@
 			        }
 			      }
 
+			      async function doRevert() {
+			        const commit = String(state.resetCommit || '').trim();
+			        if (!commit) return;
+			        try {
+			          const res = await fetch('/api/git/revert', {
+			            method: 'POST',
+			            headers: { 'Content-Type': 'application/json' },
+			            body: JSON.stringify({ cwd: getTargetCwd(), commit }),
+			          });
+			          const data = await res.json().catch(() => ({}));
+			          if (!res.ok) {
+			            const msg = data?.error || `HTTP ${res.status}`;
+			            if (res.status === 409) throw new Error(`${msg}：${data?.hint || ''}`.trim());
+			            throw new Error(msg);
+			          }
+			          showToast('✅ Revert 完成（已生成新提交）');
+			          closeResetModal();
+			          refresh({ allowInitPrompt: false }).catch(() => {});
+			        } catch (e) {
+			          showToast(`❌ Revert 失败：${e?.message || 'unknown'}`);
+			        }
+			      }
+
 			      backBtn.onclick = (e) => {
 			        e.preventDefault();
 			        e.stopPropagation();
@@ -3117,6 +3143,13 @@
 			      resetBackdrop.onclick = closeResetModal;
 			      resetCloseBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); closeResetModal(); };
 			      resetCancelBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); closeResetModal(); };
+			      revertBtn.onclick = (e) => {
+			        e.preventDefault();
+			        e.stopPropagation();
+			        const ok = confirm('Revert 会生成一个新的提交来反做改动，确认执行？');
+			        if (!ok) return;
+			        doRevert();
+			      };
 			      resetSoftBtn.onclick = (e) => {
 			        e.preventDefault();
 			        e.stopPropagation();

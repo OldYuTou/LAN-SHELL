@@ -474,6 +474,59 @@ app.post('/api/git/reset', async (req, res) => {
   }
 });
 
+app.post('/api/git/revert', async (req, res) => {
+  const r = resolveCwdFromReq(req, { bodyKey: 'cwd' });
+  if (!r.ok) return res.status(403).json({ error: r.error });
+  const commit = String(req.body?.commit || '').trim();
+  if (!commit) return res.status(400).json({ error: 'missing commit' });
+
+  try {
+    const info = await detectGitInfo(r.cwd);
+    if (!info.gitAvailable) return res.status(400).json({ error: 'git not available' });
+    if (!info.isRepo) return res.status(400).json({ error: 'not a git repo' });
+
+    // Require upstream so we can reliably determine pushed/unpushed.
+    const upstream = await detectUpstream(r.cwd);
+    if (!upstream) return res.status(400).json({ error: 'upstream not configured' });
+
+    // Ensure commit exists and is a commit object.
+    try {
+      await execFileAsync('git', ['-C', r.cwd, 'cat-file', '-e', `${commit}^{commit}`]);
+    } catch {
+      return res.status(400).json({ error: 'invalid commit' });
+    }
+
+    // Forbid reverting a commit that is already on upstream (pushed).
+    try {
+      await execFileAsync('git', ['-C', r.cwd, 'merge-base', '--is-ancestor', commit, upstream]);
+      return res.status(400).json({ error: 'commit already on upstream (pushed)' });
+    } catch {
+      // ok
+    }
+
+    // Avoid complex states: require clean working tree.
+    const { stdout: statusOut } = await execFileAsync('git', ['-C', r.cwd, 'status', '--porcelain']);
+    if (String(statusOut || '').trim()) return res.status(400).json({ error: 'working tree not clean' });
+
+    // Create a new commit that reverses changes introduced by `commit`.
+    try {
+      await execFileAsync('git', ['-C', r.cwd, 'revert', '--no-edit', commit]);
+    } catch (e) {
+      const stderr = String(e?.stderr || '');
+      // Conflicts will leave repo in REVERTING state; user can resolve in terminal then `git revert --continue` or abort.
+      if (/conflict|CONFLICT|could not apply|after resolving/i.test(stderr)) {
+        return res.status(409).json({ error: 'revert conflict', hint: '请在终端解决冲突后执行 git revert --continue，或执行 git revert --abort 取消。' });
+      }
+      return res.status(500).json({ error: e?.message || 'git revert failed' });
+    }
+
+    const { stdout: newHeadStdout } = await execFileAsync('git', ['-C', r.cwd, 'rev-parse', 'HEAD']);
+    res.json({ ok: true, cwd: r.cwd, upstream, reverted: commit, head: String(newHeadStdout || '').trim() });
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'git revert failed' });
+  }
+});
+
 // One-shot command with SSE output (NO AUTH, still restricted by ALLOWED_CMDS)
 app.post('/api/run', (req, res) => {
   const { cmd, args = [], cwd = '.' } = req.body || {};
