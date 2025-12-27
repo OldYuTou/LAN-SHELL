@@ -351,6 +351,13 @@
 		      font-size:13px;
 		      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 		    }
+		    /* 触屏设备上底部有 #cursor-pad：给编辑器滚动区留出“安全底部”，避免最后几行被触控板视觉/交互遮挡 */
+		    @media (pointer: coarse) {
+		      .editor-pane .CodeMirror-scroll {
+		        padding-bottom: calc(clamp(64px, 18vh, 240px) + env(safe-area-inset-bottom, 0px));
+		        box-sizing: content-box;
+		      }
+		    }
 
 	    /* 底部空白触控板：仅在触屏设备上显示，用于单指滑动移动光标 */
 	    #cursor-pad {
