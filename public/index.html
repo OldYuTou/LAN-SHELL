@@ -2088,28 +2088,40 @@
       tab.onclick = () => setActive(id);
       tabs.appendChild(tab);
 
-      const pane = document.createElement('div');
-      pane.className = 'term-pane';
-      document.getElementById('term-area').appendChild(pane);
+	      const pane = document.createElement('div');
+	      pane.className = 'term-pane';
+	      document.getElementById('term-area').appendChild(pane);
 
-	      // 计算初始终端尺寸
-	      function calculateTermSize() {
-	        const termArea = document.getElementById('term-area');
-	        // 注意：移动端会在底部渲染一个“空白触控板”(#cursor-pad) 作为单指移动光标区域，
-	        // 终端实际可用区域以 pane 的尺寸为准，避免行数计算偏大导致内容被遮挡。
-	        const container = pane || termArea;
-	        const charWidth = 7.6;
-	        const lineHeight = 18;
-	        // pane 已按 CSS inset 扣掉边距，这里直接用 clientWidth/clientHeight，避免误差导致底部出现“空隙感”。
-	        const availableWidth = container.clientWidth;
-	        const availableHeight = container.clientHeight;
+	      // 默认单元格尺寸（会在 term.open 后尽量用 xterm 实测值替换，避免不同浏览器下 rows 计算偏差导致“字铺不满”）
+	      let cellWidth = 7.6;
+	      let cellHeight = 18;
+
+	      function updateCellMetrics(term) {
+	        try {
+	          const d = term?._core?._renderService?.dimensions;
+	          const w = d?.actualCellWidth ?? d?.css?.cell?.width;
+	          const h = d?.actualCellHeight ?? d?.css?.cell?.height;
+	          if (Number.isFinite(w) && w > 0) cellWidth = w;
+	          if (Number.isFinite(h) && h > 0) cellHeight = h;
+	        } catch {}
+	      }
+
+		      // 计算初始终端尺寸
+		      function calculateTermSize() {
+		        const termArea = document.getElementById('term-area');
+		        // 注意：移动端会在底部渲染一个“空白触控板”(#cursor-pad) 作为单指移动光标区域，
+		        // 终端实际可用区域以 pane 的尺寸为准，避免行数计算偏大导致内容被遮挡。
+		        const container = pane || termArea;
+		        // pane 已按 CSS inset 扣掉边距，这里直接用 clientWidth/clientHeight，避免误差导致底部出现“空隙感”。
+		        const availableWidth = container.clientWidth;
+		        const availableHeight = container.clientHeight;
+		        
+		        const cols = Math.floor(availableWidth / (cellWidth || 1));
+		        const rows = Math.floor(availableHeight / (cellHeight || 1));
 	        
-	        const cols = Math.floor(availableWidth / charWidth);
-	        const rows = Math.floor(availableHeight / lineHeight);
-        
-        return {
-          cols: Math.max(Math.min(cols, 150), 20),
-          rows: Math.max(Math.min(rows, 50), 10)
+	        return {
+	          cols: Math.max(Math.min(cols, 150), 20),
+	          rows: Math.max(Math.min(rows, 50), 10)
         };
       }
 
@@ -2141,21 +2153,32 @@
 	        console.warn('WebGL 渲染加速不可用，已降级:', e);
 	      }
 
-      // 创建一个专门的resize函数
-      function resizeTerminal() {
-        const newSize = calculateTermSize();
-        if (term.cols !== newSize.cols || term.rows !== newSize.rows) {
-          term.resize(newSize.cols, newSize.rows);
-        }
-      }
+	      // 创建一个专门的resize函数
+	      function resizeTerminal() {
+	        updateCellMetrics(term);
+	        const newSize = calculateTermSize();
+	        if (term.cols !== newSize.cols || term.rows !== newSize.rows) {
+	          term.resize(newSize.cols, newSize.rows);
+	        }
+	      }
 
       // 监听容器尺寸变化
       let resizeTimeout;
-      const resizeObserver = new ResizeObserver(() => {
-        clearTimeout(resizeTimeout);
-        resizeTimeout = setTimeout(resizeTerminal, 50);
-      });
-      resizeObserver.observe(document.getElementById('term-area'));
+	      const resizeObserver = new ResizeObserver(() => {
+	        clearTimeout(resizeTimeout);
+	        resizeTimeout = setTimeout(resizeTerminal, 50);
+	      });
+	      // 观察 pane 尺寸变化更精确（绝对定位 + inset 变化也能触发），避免出现“底部有空白但 rows 没跟上”的情况
+	      try { resizeObserver.observe(pane); } catch { resizeObserver.observe(document.getElementById('term-area')); }
+
+	      // term.open 后的前几帧，xterm 的实际 cell 尺寸可能才稳定：补几次测量与 resize，尽量让字铺满高度（Android Edge 常见）
+	      try {
+	        requestAnimationFrame(() => {
+	          try { updateCellMetrics(term); resizeTerminal(); } catch {}
+	          setTimeout(() => { try { updateCellMetrics(term); resizeTerminal(); } catch {} }, 60);
+	          setTimeout(() => { try { updateCellMetrics(term); resizeTerminal(); } catch {} }, 220);
+	        });
+	      } catch {}
 
 			      const session = { 
 			        id, cwd, term, pane, tab, ws: null, inputDisposable: null, 
