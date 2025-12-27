@@ -424,6 +424,66 @@ app.post('/api/git/init', async (req, res) => {
   }
 });
 
+app.post('/api/git/reset', async (req, res) => {
+  const r = resolveCwdFromReq(req, { bodyKey: 'cwd' });
+  if (!r.ok) return res.status(403).json({ error: r.error });
+  const mode = String(req.body?.mode || '').toLowerCase();
+  if (mode !== 'soft' && mode !== 'hard') return res.status(400).json({ error: 'mode must be soft|hard' });
+  const commit = String(req.body?.commit || '').trim();
+  if (!commit) return res.status(400).json({ error: 'missing commit' });
+  const confirmHard = Boolean(req.body?.confirmHard);
+
+  try {
+    const info = await detectGitInfo(r.cwd);
+    if (!info.gitAvailable) return res.status(400).json({ error: 'git not available' });
+    if (!info.isRepo) return res.status(400).json({ error: 'not a git repo' });
+
+    if (mode === 'hard' && !confirmHard) return res.status(400).json({ error: 'hard reset requires confirmHard=true' });
+
+    // Ensure commit exists and is a commit object.
+    try {
+      await execFileAsync('git', ['-C', r.cwd, 'cat-file', '-e', `${commit}^{commit}`]);
+    } catch {
+      return res.status(400).json({ error: 'invalid commit' });
+    }
+
+    // Only allow "撤回本次提交" for the latest commit (HEAD).
+    const { stdout: headStdout } = await execFileAsync('git', ['-C', r.cwd, 'rev-parse', 'HEAD']);
+    const head = String(headStdout || '').trim();
+    if (!head) return res.status(400).json({ error: 'HEAD not found' });
+    if (head !== commit) return res.status(400).json({ error: 'only HEAD can be reverted via reset' });
+
+    // Require upstream so we can reliably determine pushed/unpushed.
+    const upstream = await detectUpstream(r.cwd);
+    if (!upstream) return res.status(400).json({ error: 'upstream not configured' });
+
+    // If HEAD is already reachable from upstream, treat it as pushed and forbid reset here.
+    // (Prevents accidental history rewrite after pushing.)
+    try {
+      await execFileAsync('git', ['-C', r.cwd, 'merge-base', '--is-ancestor', commit, upstream]);
+      return res.status(400).json({ error: 'commit already on upstream (pushed)' });
+    } catch {
+      // non-zero exit means "not an ancestor" -> ok (unpushed or divergent)
+    }
+
+    // Reset to the parent of the commit being undone.
+    let parent = '';
+    try {
+      const { stdout } = await execFileAsync('git', ['-C', r.cwd, 'rev-parse', `${commit}^`]);
+      parent = String(stdout || '').trim();
+    } catch {
+      return res.status(400).json({ error: 'no parent commit (cannot reset)' });
+    }
+    if (!parent) return res.status(400).json({ error: 'no parent commit (cannot reset)' });
+
+    await execFileAsync('git', ['-C', r.cwd, 'reset', mode === 'soft' ? '--soft' : '--hard', parent]);
+    const { stdout: newHeadStdout } = await execFileAsync('git', ['-C', r.cwd, 'rev-parse', 'HEAD']);
+    res.json({ ok: true, cwd: r.cwd, mode, upstream, undone: commit, target: parent, head: String(newHeadStdout || '').trim() });
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'git reset failed' });
+  }
+});
+
 // One-shot command with SSE output (NO AUTH, still restricted by ALLOWED_CMDS)
 app.post('/api/run', (req, res) => {
   const { cmd, args = [], cwd = '.' } = req.body || {};
