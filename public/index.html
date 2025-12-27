@@ -3504,20 +3504,23 @@
 			      }
 
 			      // 触控手势：通过手势触发右侧工具栏的既有能力（不改原快捷键/按钮逻辑）
-			      function initTerminalGestures({ termArea, onCopy, onPaste } = {}) {
-			        if (!termArea || termArea.__lanShellGesturesInstalled) return;
-			        termArea.__lanShellGesturesInstalled = true;
+				      function initTerminalGestures({ termArea, onCopy, onPaste } = {}) {
+				        if (!termArea || termArea.__lanShellGesturesInstalled) return;
+				        termArea.__lanShellGesturesInstalled = true;
 
-			        const TAP_MAX_MS = 260;
-			        const LONG_PRESS_MS = 520;
-			        const TAP_MAX_MOVE = 12; // px
-			        const AXIS_LOCK_THRESHOLD = 10; // px
-			        const STEP_PX = 18; // px：每移动多少像素发送一次方向键
+				        const TAP_MAX_MS = 260;
+				        const LONG_PRESS_MS = 520;
+				        // 单指“光标映射”判定：点击后立刻移动 -> 视作滚动；需要按住一会才进入光标模式
+				        const CURSOR_HOLD_MS = 360;
+				        const CURSOR_PENDING_MAX_MOVE = 10; // px：按住判定前允许的抖动范围
+				        const TAP_MAX_MOVE = 12; // px
+				        const AXIS_LOCK_THRESHOLD = 10; // px
+				        const STEP_PX = 18; // px：每移动多少像素发送一次方向键
 
-			        const state = {
-			          one: null,
-			          multi: null,
-			        };
+				        const state = {
+				          one: null,
+				          multi: null,
+				        };
 
 			        function sendToTerminalSilent(data) {
 			          const s = getActive();
@@ -3529,26 +3532,61 @@
 			          return true;
 			        }
 
-			        function dist(x1, y1, x2, y2) {
-			          const dx = x2 - x1;
-			          const dy = y2 - y1;
-			          return Math.hypot(dx, dy);
-			        }
+				        function dist(x1, y1, x2, y2) {
+				          const dx = x2 - x1;
+				          const dy = y2 - y1;
+				          return Math.hypot(dx, dy);
+				        }
 
-			        function startOneFinger(t) {
-			          state.one = {
-			            active: true,
-			            startX: t.clientX,
-			            startY: t.clientY,
-			            lastX: t.clientX,
-			            lastY: t.clientY,
-			            totalX: 0,
-			            totalY: 0,
-			            axis: null, // 'x' | 'y'
-			            accum: 0,
-			          };
-			          state.multi = null;
-			        }
+				        function cancelOneHoldTimer() {
+				          const o = state.one;
+				          if (!o) return;
+				          if (o.holdTimer) {
+				            try { clearTimeout(o.holdTimer); } catch {}
+				            o.holdTimer = null;
+				          }
+				        }
+
+				        function startOneFinger(t) {
+				          state.one = {
+				            active: true,
+				            mode: 'pending', // 'pending' | 'cursor' | 'scroll'
+				            startTs: Date.now(),
+				            holdTimer: null,
+				            startX: t.clientX,
+				            startY: t.clientY,
+				            lastX: t.clientX,
+				            lastY: t.clientY,
+				            totalX: 0,
+				            totalY: 0,
+				            axis: null, // 'x' | 'y'
+				            accum: 0,
+				          };
+				          state.multi = null;
+
+				          // 单指按住一会才进入“光标映射”，否则（立刻滑动）按滚动处理
+				          try {
+				            state.one.holdTimer = setTimeout(() => {
+				              const o = state.one;
+				              if (!o?.active) return;
+				              if (o.mode !== 'pending') return;
+				              o.holdTimer = null;
+				              if (dist(o.startX, o.startY, o.lastX, o.lastY) > CURSOR_PENDING_MAX_MOVE) {
+				                o.mode = 'scroll';
+				                return;
+				              }
+				              o.mode = 'cursor';
+				              // 进入光标模式时重置起点，避免把按住期间的微小抖动当成一次大位移
+				              o.startX = o.lastX;
+				              o.startY = o.lastY;
+				              o.totalX = 0;
+				              o.totalY = 0;
+				              o.axis = null;
+				              o.accum = 0;
+				              showToast('🖱️ 光标映射已开启');
+				            }, CURSOR_HOLD_MS);
+				          } catch {}
+				        }
 
 			        function startMultiFinger(e) {
 			          const touches = Array.from(e.touches || []);
@@ -3630,19 +3668,34 @@
 			          }
 			        }
 
-			        function handleOneFingerMove(e) {
-			          const o = state.one;
-			          if (!o?.active) return;
-			          if ((e.touches?.length || 0) !== 1) return;
+				        function handleOneFingerMove(e) {
+				          const o = state.one;
+				          if (!o?.active) return;
+				          if ((e.touches?.length || 0) !== 1) return;
 
-			          // 单指移动：阻止页面滚动，把触控当作“触控板/方向键”
-			          try { e.preventDefault(); } catch {}
+				          const t = e.touches[0];
 
-			          const t = e.touches[0];
-			          const dx = t.clientX - o.lastX;
-			          const dy = t.clientY - o.lastY;
-			          o.lastX = t.clientX;
-			          o.lastY = t.clientY;
+				          // 单指手势：pending 阶段不拦截滚动；只有进入 cursor 模式才拦截并发送方向键
+				          if (o.mode !== 'cursor') {
+				            o.lastX = t.clientX;
+				            o.lastY = t.clientY;
+				            if (o.mode === 'pending') {
+				              const moved = dist(o.startX, o.startY, t.clientX, t.clientY);
+				              if (moved > CURSOR_PENDING_MAX_MOVE) {
+				                o.mode = 'scroll';
+				                cancelOneHoldTimer();
+				              }
+				            }
+				            return;
+				          }
+
+				          // 单指光标模式：阻止页面滚动，把触控当作“触控板/方向键”
+				          try { e.preventDefault(); } catch {}
+
+				          const dx = t.clientX - o.lastX;
+				          const dy = t.clientY - o.lastY;
+				          o.lastX = t.clientX;
+				          o.lastY = t.clientY;
 
 			          o.totalX = t.clientX - o.startX;
 			          o.totalY = t.clientY - o.startY;
@@ -3702,10 +3755,10 @@
 			          { passive: false, capture: true }
 			        );
 
-			        termArea.addEventListener(
-			          'touchend',
-			          (e) => {
-			            if (state.multi?.active) {
+				        termArea.addEventListener(
+				          'touchend',
+				          (e) => {
+				            if (state.multi?.active) {
 			              // 注意：多指点按会分多次触发 touchend（先抬起一根，再抬起另一根），不能在中途直接取消。
 			              state.multi.endedCount += (e.changedTouches?.length || 0);
 			              // 记录松开瞬间的位置（部分浏览器 touchmove 不一定覆盖到）
@@ -3717,21 +3770,25 @@
 			              } else {
 			              tryFireMultiTapIfDone({ force: (e.touches?.length || 0) === 0 });
 			              }
-			            }
-			            if ((e.touches?.length || 0) === 0) state.one = null;
-			          },
-			          { passive: true, capture: true }
-			        );
+				            }
+				            if ((e.touches?.length || 0) === 0) {
+				              cancelOneHoldTimer();
+				              state.one = null;
+				            }
+				          },
+				          { passive: true, capture: true }
+				        );
 
-			        termArea.addEventListener(
-			          'touchcancel',
-			          () => {
-			            cancelMultiLongPressTimer();
-			            state.one = null;
-			            state.multi = null;
-			          },
-			          { passive: true, capture: true }
-			        );
+				        termArea.addEventListener(
+				          'touchcancel',
+				          () => {
+				            cancelMultiLongPressTimer();
+				            cancelOneHoldTimer();
+				            state.one = null;
+				            state.multi = null;
+				          },
+				          { passive: true, capture: true }
+				        );
 			      }
 
 			      // Ctrl / Alt 组合键一次性开关
