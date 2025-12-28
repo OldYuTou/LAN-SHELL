@@ -3847,7 +3847,20 @@
 	          session.suppressClose = false;
 	          return;
 	        }
-	        queueTermWrite(session, '\\r\\n[连接已断开 - 会话已保存，刷新页面可恢复]\\r\\n');
+	        queueTermWrite(session, '\\r\\n[连接已断开 - 会话已保存，尝试自动重连中...]\\r\\n');
+	        // 自动重连（带指数退避上限）
+	        const base = 800;
+	        const max = 8000;
+	        const attempts = session._retries || 0;
+	        const delay = Math.min(max, base * Math.pow(1.6, attempts));
+	        session._retries = attempts + 1;
+	        setTimeout(() => {
+	          try {
+	            connectSession(session);
+	          } catch (e) {
+	            queueTermWrite(session, `\\r\\n[重连失败：${e?.message || e}]\\r\\n`);
+	          }
+	        }, delay);
 	      };
       
 	      ws.onopen = () => {
