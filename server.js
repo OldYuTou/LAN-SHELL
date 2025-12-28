@@ -1112,6 +1112,97 @@ app.get('/api/git/commits', async (req, res) => {
   }
 });
 
+// 列出分支（NO AUTH）
+app.get('/api/git/branches', async (req, res) => {
+  const r = resolveCwdFromReq(req, { queryKey: 'cwd' });
+  if (!r.ok) return res.status(403).json({ error: r.error });
+  try {
+    const info = await detectGitInfo(r.cwd);
+    if (!info.gitAvailable) return res.json({ ok: true, gitAvailable: false, isRepo: false, branches: [] });
+    if (!info.isRepo) return res.json({ ok: true, gitAvailable: true, isRepo: false, branches: [] });
+
+    const cur = await execFileAsync('git', ['-C', r.cwd, 'rev-parse', '--abbrev-ref', 'HEAD']).then((r) => r.stdout.trim()).catch(() => null);
+    const locals = await execFileAsync('git', ['-C', r.cwd, 'branch', '--list']).then((r) =>
+      r.stdout
+        .split('\n')
+        .map((s) => s.replace(/^\*/, '').trim())
+        .filter(Boolean)
+    ).catch(() => []);
+    const remotes = await execFileAsync('git', ['-C', r.cwd, 'branch', '-r']).then((r) =>
+      r.stdout
+        .split('\n')
+        .map((s) => s.replace(/^\*/, '').trim())
+        .filter(Boolean)
+    ).catch(() => []);
+    const upstream = await detectUpstream(r.cwd);
+    return res.json({ ok: true, gitAvailable: true, isRepo: true, cwd: r.cwd, current: cur, locals, remotes, upstream });
+  } catch (e) {
+    return res.status(500).json({ error: e?.message || 'branches failed' });
+  }
+});
+
+async function isWorktreeDirty(cwd) {
+  try {
+    const { stdout } = await execFileAsync('git', ['-C', cwd, 'status', '--porcelain']);
+    return Boolean(stdout.trim());
+  } catch {
+    return true;
+  }
+}
+
+app.post('/api/git/checkout', async (req, res) => {
+  const body = req.body || {};
+  const r = resolveCwdFromReq(req, { bodyKey: 'cwd' });
+  if (!r.ok) return res.status(403).json({ error: r.error });
+  const branch = (body.branch || '').toString().trim();
+  const force = Boolean(body.force);
+  if (!branch) return res.status(400).json({ error: 'branch required' });
+
+  try {
+    const info = await detectGitInfo(r.cwd);
+    if (!info.gitAvailable || !info.isRepo) return res.status(400).json({ error: 'not a git repo' });
+    const dirty = await isWorktreeDirty(r.cwd);
+    if (dirty && !force) return res.status(409).json({ error: 'worktree dirty' });
+
+    const isRemote = branch.includes('/');
+    if (isRemote) {
+      // create local tracking branch
+      const local = branch.replace(/^origin\//, '');
+      await execFileAsync('git', ['-C', r.cwd, 'fetch', '--all']);
+      await execFileAsync('git', ['-C', r.cwd, 'checkout', '-B', local, branch]);
+    } else {
+      await execFileAsync('git', ['-C', r.cwd, 'checkout', branch, ...(force ? ['-f'] : [])]);
+    }
+
+    const cur = await execFileAsync('git', ['-C', r.cwd, 'rev-parse', '--abbrev-ref', 'HEAD']).then((r) => r.stdout.trim()).catch(() => branch);
+    return res.json({ ok: true, current: cur });
+  } catch (e) {
+    return res.status(500).json({ error: e?.message || 'checkout failed' });
+  }
+});
+
+app.post('/api/git/checkout-new', async (req, res) => {
+  const body = req.body || {};
+  const r = resolveCwdFromReq(req, { bodyKey: 'cwd' });
+  if (!r.ok) return res.status(403).json({ error: r.error });
+  const branch = (body.branch || '').toString().trim();
+  const from = (body.from || 'HEAD').toString().trim() || 'HEAD';
+  if (!branch) return res.status(400).json({ error: 'branch required' });
+
+  try {
+    const info = await detectGitInfo(r.cwd);
+    if (!info.gitAvailable || !info.isRepo) return res.status(400).json({ error: 'not a git repo' });
+    const dirty = await isWorktreeDirty(r.cwd);
+    if (dirty) return res.status(409).json({ error: 'worktree dirty' });
+
+    await execFileAsync('git', ['-C', r.cwd, 'checkout', '-b', branch, from]);
+    const cur = await execFileAsync('git', ['-C', r.cwd, 'rev-parse', '--abbrev-ref', 'HEAD']).then((r) => r.stdout.trim()).catch(() => branch);
+    return res.json({ ok: true, current: cur });
+  } catch (e) {
+    return res.status(500).json({ error: e?.message || 'checkout new failed' });
+  }
+});
+
 app.post('/api/git/init', async (req, res) => {
   const r = resolveCwdFromReq(req, { bodyKey: 'cwd' });
   if (!r.ok) return res.status(403).json({ error: r.error });
