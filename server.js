@@ -629,6 +629,286 @@ app.post('/api/archive/extract', async (req, res) => {
   return res.json({ ok: true, type, archive: ar.target, dest: dest.target, entries: entries.length });
 });
 
+// 文件操作（NO AUTH）
+// - 删除：二次确认由前端负责；服务端仅做路径与根目录保护
+// - 重命名：仅改名，不允许跨目录（避免变相 move）
+// - 复制/移动：支持文件与目录，目录可合并，冲突策略：overwrite/skip/error
+
+function isRootPath(p) {
+  try {
+    const a = path.resolve(p);
+    const b = path.resolve(ROOT);
+    return a === b;
+  } catch {
+    return false;
+  }
+}
+
+function ensureDirExists(dirPath) {
+  if (fs.existsSync(dirPath)) {
+    const st = fs.statSync(dirPath);
+    if (!st.isDirectory()) throw new Error('dest is not a directory');
+    return;
+  }
+  fs.mkdirSync(dirPath, { recursive: true });
+}
+
+function isSubPath(child, parent) {
+  try {
+    const rel = path.relative(parent, child);
+    if (!rel) return true; // same path
+    return !rel.startsWith('..') && !path.isAbsolute(rel);
+  } catch {
+    return false;
+  }
+}
+
+function copyFileWithPolicy(src, dest, policy, stats) {
+  if (fs.existsSync(dest)) {
+    if (policy === 'skip') {
+      stats.skipped += 1;
+      return;
+    }
+    if (policy === 'error') {
+      const e = new Error('dest exists');
+      e.code = 'EEXIST';
+      throw e;
+    }
+    // overwrite
+    fs.rmSync(dest, { force: true, recursive: true });
+    stats.overwritten += 1;
+  }
+  fs.copyFileSync(src, dest);
+  stats.copied += 1;
+}
+
+function copyDirMerge(srcDir, destDir, policy, stats) {
+  ensureDirExists(destDir);
+
+  const entries = fs.readdirSync(srcDir, { withFileTypes: true });
+  for (const ent of entries) {
+    const srcPath = path.join(srcDir, ent.name);
+    const destPath = path.join(destDir, ent.name);
+
+    if (ent.isSymbolicLink()) {
+      // 为安全与可预测性：不跟随/不复制软链接
+      const e = new Error(`symlink not supported: ${ent.name}`);
+      e.code = 'ESYMLINK';
+      throw e;
+    }
+
+    if (ent.isDirectory()) {
+      if (fs.existsSync(destPath) && !fs.statSync(destPath).isDirectory()) {
+        if (policy === 'skip') {
+          stats.skipped += 1;
+          continue;
+        }
+        if (policy === 'error') {
+          const e = new Error('dest exists and is not directory');
+          e.code = 'EEXIST';
+          throw e;
+        }
+        fs.rmSync(destPath, { force: true, recursive: true });
+        stats.overwritten += 1;
+      }
+      copyDirMerge(srcPath, destPath, policy, stats);
+    } else if (ent.isFile()) {
+      copyFileWithPolicy(srcPath, destPath, policy, stats);
+    } else {
+      // 其它类型（socket、fifo 等）不处理
+      const e = new Error(`unsupported entry type: ${ent.name}`);
+      e.code = 'EUNSUPPORTED';
+      throw e;
+    }
+  }
+}
+
+function moveFileWithPolicy(src, dest, policy, stats) {
+  if (fs.existsSync(dest)) {
+    if (policy === 'skip') {
+      stats.skipped += 1;
+      return;
+    }
+    if (policy === 'error') {
+      const e = new Error('dest exists');
+      e.code = 'EEXIST';
+      throw e;
+    }
+    fs.rmSync(dest, { force: true, recursive: true });
+    stats.overwritten += 1;
+  }
+  try {
+    fs.renameSync(src, dest);
+    stats.moved += 1;
+  } catch {
+    // 跨设备等情况：回退为 copy + delete
+    fs.copyFileSync(src, dest);
+    stats.moved += 1;
+    fs.rmSync(src, { force: true });
+  }
+}
+
+function moveDirMerge(srcDir, destDir, policy, stats) {
+  // 如果目标不存在，优先尝试直接 rename（最快）
+  if (!fs.existsSync(destDir)) {
+    try {
+      fs.renameSync(srcDir, destDir);
+      stats.moved += 1;
+      return;
+    } catch {
+      // fallthrough：merge move
+    }
+  }
+
+  ensureDirExists(destDir);
+  const entries = fs.readdirSync(srcDir, { withFileTypes: true });
+  for (const ent of entries) {
+    const srcPath = path.join(srcDir, ent.name);
+    const destPath = path.join(destDir, ent.name);
+
+    if (ent.isSymbolicLink()) {
+      const e = new Error(`symlink not supported: ${ent.name}`);
+      e.code = 'ESYMLINK';
+      throw e;
+    }
+
+    if (ent.isDirectory()) {
+      if (fs.existsSync(destPath) && !fs.statSync(destPath).isDirectory()) {
+        if (policy === 'skip') {
+          stats.skipped += 1;
+          continue;
+        }
+        if (policy === 'error') {
+          const e = new Error('dest exists and is not directory');
+          e.code = 'EEXIST';
+          throw e;
+        }
+        fs.rmSync(destPath, { force: true, recursive: true });
+        stats.overwritten += 1;
+      }
+      moveDirMerge(srcPath, destPath, policy, stats);
+    } else if (ent.isFile()) {
+      moveFileWithPolicy(srcPath, destPath, policy, stats);
+    } else {
+      const e = new Error(`unsupported entry type: ${ent.name}`);
+      e.code = 'EUNSUPPORTED';
+      throw e;
+    }
+  }
+
+  // 若目录已空则清理；如果有 skip 导致仍有内容，则保留
+  try {
+    const left = fs.readdirSync(srcDir);
+    if (!left.length) fs.rmdirSync(srcDir);
+  } catch {}
+}
+
+app.post('/api/fs/delete', (req, res) => {
+  const body = req.body || {};
+  const r = resolvePathFromQuery(body.path);
+  if (!r.ok) return res.status(403).json({ error: r.error });
+  if (isRootPath(r.target)) return res.status(403).json({ error: 'forbidden at root' });
+  try {
+    const st = fs.statSync(r.target);
+    if (st.isDirectory()) fs.rmSync(r.target, { recursive: true, force: true });
+    else fs.rmSync(r.target, { force: true });
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(500).json({ error: e?.message || 'delete failed' });
+  }
+});
+
+app.post('/api/fs/rename', (req, res) => {
+  const body = req.body || {};
+  const r = resolvePathFromQuery(body.path);
+  if (!r.ok) return res.status(403).json({ error: r.error });
+  if (isRootPath(r.target)) return res.status(403).json({ error: 'forbidden at root' });
+  const nm = validateFileName(body.newName);
+  if (!nm.ok) return res.status(400).json({ error: nm.error });
+  const dest = path.join(path.dirname(r.target), nm.name);
+  if (!withinRoot(dest)) return res.status(403).json({ error: 'out of root' });
+  try {
+    if (fs.existsSync(dest)) return res.status(409).json({ error: 'dest exists' });
+    fs.renameSync(r.target, dest);
+    return res.json({ ok: true, path: dest });
+  } catch (e) {
+    return res.status(500).json({ error: e?.message || 'rename failed' });
+  }
+});
+
+app.post('/api/fs/copy', (req, res) => {
+  const body = req.body || {};
+  const src = resolvePathFromQuery(body.src);
+  if (!src.ok) return res.status(403).json({ error: src.error });
+  const destDir = resolvePathFromQuery(body.destDir);
+  if (!destDir.ok) return res.status(403).json({ error: destDir.error });
+  const policy = (body.conflict || 'error').toString();
+  if (!['overwrite', 'skip', 'error'].includes(policy)) return res.status(400).json({ error: 'invalid conflict policy' });
+
+  const name = body.destName ? validateFileName(body.destName) : { ok: true, name: path.basename(src.target) };
+  if (!name.ok) return res.status(400).json({ error: name.error });
+
+  try {
+    const dst = path.join(destDir.target, name.name);
+    if (!withinRoot(dst)) return res.status(403).json({ error: 'out of root' });
+    ensureDirExists(destDir.target);
+
+    const st = fs.statSync(src.target);
+    if (st.isDirectory() && isSubPath(dst, src.target)) return res.status(400).json({ error: 'cannot copy directory into itself' });
+    if (st.isFile() && path.resolve(dst) === path.resolve(src.target)) return res.status(400).json({ error: 'dest equals src' });
+
+    const stats = { copied: 0, skipped: 0, overwritten: 0 };
+    if (st.isFile()) {
+      copyFileWithPolicy(src.target, dst, policy, stats);
+    } else if (st.isDirectory()) {
+      copyDirMerge(src.target, dst, policy, stats);
+    } else {
+      return res.status(400).json({ error: 'unsupported type' });
+    }
+    return res.json({ ok: true, dest: dst, ...stats });
+  } catch (e) {
+    if (e?.code === 'EEXIST') return res.status(409).json({ error: 'dest exists' });
+    return res.status(500).json({ error: e?.message || 'copy failed' });
+  }
+});
+
+app.post('/api/fs/move', (req, res) => {
+  const body = req.body || {};
+  const src = resolvePathFromQuery(body.src);
+  if (!src.ok) return res.status(403).json({ error: src.error });
+  if (isRootPath(src.target)) return res.status(403).json({ error: 'forbidden at root' });
+  const destDir = resolvePathFromQuery(body.destDir);
+  if (!destDir.ok) return res.status(403).json({ error: destDir.error });
+  const policy = (body.conflict || 'error').toString();
+  if (!['overwrite', 'skip', 'error'].includes(policy)) return res.status(400).json({ error: 'invalid conflict policy' });
+
+  const name = body.destName ? validateFileName(body.destName) : { ok: true, name: path.basename(src.target) };
+  if (!name.ok) return res.status(400).json({ error: name.error });
+
+  try {
+    const dst = path.join(destDir.target, name.name);
+    if (!withinRoot(dst)) return res.status(403).json({ error: 'out of root' });
+    ensureDirExists(destDir.target);
+
+    const st = fs.statSync(src.target);
+    if (st.isDirectory() && isSubPath(dst, src.target)) return res.status(400).json({ error: 'cannot move directory into itself' });
+    if (st.isFile() && path.resolve(dst) === path.resolve(src.target)) return res.status(400).json({ error: 'dest equals src' });
+
+    const stats = { moved: 0, skipped: 0, overwritten: 0 };
+    if (st.isFile()) {
+      moveFileWithPolicy(src.target, dst, policy, stats);
+    } else if (st.isDirectory()) {
+      moveDirMerge(src.target, dst, policy, stats);
+    } else {
+      return res.status(400).json({ error: 'unsupported type' });
+    }
+    return res.json({ ok: true, dest: dst, ...stats });
+  } catch (e) {
+    if (e?.code === 'EEXIST') return res.status(409).json({ error: 'dest exists' });
+    return res.status(500).json({ error: e?.message || 'move failed' });
+  }
+});
+
 // 指令集：读取/保存（NO AUTH）
 app.get('/api/command-sets', (req, res) => {
   res.json(readCommandSets());

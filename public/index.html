@@ -392,6 +392,140 @@
     .dir-item:hover { background: rgba(255,255,255,0.07); }
     #dirpicker-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:10px; }
 
+    /* 文件操作：长按菜单 */
+    #op-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      z-index: 1000;
+    }
+    #op-modal-backdrop.open { display:block; }
+    #op-modal {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: min(92vw, 560px);
+      background: rgba(26, 30, 44, 0.96);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 14px 50px rgba(0,0,0,0.5);
+      display: none;
+      z-index: 1001;
+      color:#fff;
+    }
+    #op-modal.open { display:block; }
+    #op-modal .row { display:flex; align-items:center; gap:10px; margin-bottom: 12px; }
+    #op-modal .title { font-weight:800; font-size:14px; letter-spacing:0.2px; }
+    #op-modal .close {
+      margin-left:auto;
+      background: transparent;
+      border: none;
+      color: rgba(255,255,255,0.85);
+      font-size: 20px;
+      cursor:pointer;
+    }
+    #op-path {
+      font-size:12px;
+      opacity:0.85;
+      word-break: break-all;
+      margin-bottom: 12px;
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 12px;
+      padding: 10px 10px;
+      background: rgba(0,0,0,0.10);
+    }
+    #op-actions { display:flex; gap:10px; flex-wrap:wrap; }
+    #op-actions button {
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 13px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 800;
+    }
+    #op-actions button.primary {
+      background: rgba(45, 140, 255, 0.92);
+      border-color: rgba(45, 140, 255, 0.65);
+    }
+    #op-actions button.danger {
+      background: rgba(255, 80, 80, 0.24);
+      border-color: rgba(255, 80, 80, 0.60);
+      color:#ff6b6b;
+    }
+
+    /* 复制/剪切：选择目标目录 + 命名 */
+    #xfer-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      z-index: 1000;
+    }
+    #xfer-modal-backdrop.open { display:block; }
+    #xfer-modal {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: min(92vw, 600px);
+      background: rgba(26, 30, 44, 0.96);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 14px 50px rgba(0,0,0,0.5);
+      display: none;
+      z-index: 1001;
+      color:#fff;
+    }
+    #xfer-modal.open { display:block; }
+    #xfer-modal .row { display:flex; align-items:center; gap:10px; margin-bottom: 12px; }
+    #xfer-modal .title { font-weight:800; font-size:14px; letter-spacing:0.2px; }
+    #xfer-modal .close {
+      margin-left:auto;
+      background: transparent;
+      border: none;
+      color: rgba(255,255,255,0.85);
+      font-size: 20px;
+      cursor:pointer;
+    }
+    .xfer-field { margin-top:10px; }
+    .xfer-field label { display:block; font-size: 12px; opacity:0.85; margin-bottom: 6px; }
+    .xfer-field input, .xfer-field select {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.18);
+      color: #fff;
+      padding: 10px 12px;
+      box-sizing: border-box;
+      font-size: 13px;
+      outline: none;
+    }
+    #xfer-dir-list {
+      margin-top: 10px;
+      max-height: 42vh;
+      overflow:auto;
+      border:1px solid rgba(255,255,255,0.10);
+      border-radius:12px;
+      padding:8px;
+      background: rgba(0,0,0,0.10);
+    }
+    #xfer-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:12px; flex-wrap:wrap; }
+    #xfer-actions button.primary {
+      background: rgba(45, 140, 255, 0.92);
+      border-color: rgba(45, 140, 255, 0.65);
+    }
+    #xfer-actions button.danger {
+      background: rgba(255, 80, 80, 0.24);
+      border-color: rgba(255, 80, 80, 0.60);
+      color:#ff6b6b;
+    }
+
     /* 文件列表 */
     #list { 
       flex:1; 
@@ -1586,6 +1720,51 @@
 			    </div>
 			  </div>
 
+			  <!-- 文件操作：长按菜单 -->
+			  <div id="op-modal-backdrop" aria-hidden="true"></div>
+			  <div id="op-modal" role="dialog" aria-modal="true" aria-hidden="true">
+			    <div class="row">
+			      <div class="title" id="op-title">文件操作</div>
+			      <button class="close" id="opCloseBtn" title="Close">×</button>
+			    </div>
+			    <div id="op-path"></div>
+			    <div id="op-actions"></div>
+			  </div>
+
+			  <!-- 复制/剪切：选择目标目录并命名 -->
+			  <div id="xfer-modal-backdrop" aria-hidden="true"></div>
+			  <div id="xfer-modal" role="dialog" aria-modal="true" aria-hidden="true">
+			    <div class="row">
+			      <div class="title" id="xfer-title">复制/移动</div>
+			      <button class="close" id="xferCloseBtn" title="Close">×</button>
+			    </div>
+			    <div class="xfer-field">
+			      <label>源路径</label>
+			      <input id="xfer-src" spellcheck="false" autocapitalize="off" autocorrect="off" />
+			    </div>
+			    <div class="xfer-field">
+			      <label>目标目录（点击文件夹进入；点击 ⬆️ 返回上级）</label>
+			      <input id="xfer-dest-dir" spellcheck="false" autocapitalize="off" autocorrect="off" />
+			      <div id="xfer-dir-list"></div>
+			    </div>
+			    <div class="xfer-field">
+			      <label>新名称</label>
+			      <input id="xfer-dest-name" spellcheck="false" autocapitalize="off" autocorrect="off" />
+			    </div>
+			    <div class="xfer-field">
+			      <label>同名处理（目录合并时也生效）</label>
+			      <select id="xfer-conflict">
+			        <option value="error">遇到同名就报错</option>
+			        <option value="skip">跳过同名文件</option>
+			        <option value="overwrite">覆盖同名文件</option>
+			      </select>
+			    </div>
+			    <div id="xfer-actions">
+			      <button id="xferCancelBtn" class="danger">取消</button>
+			      <button id="xferOkBtn" class="primary">执行</button>
+			    </div>
+			  </div>
+
 			  <!-- 组合键弹窗 -->
 			  <div id="combo-modal-backdrop" aria-hidden="true"></div>
 			  <div id="combo-modal" role="dialog" aria-modal="true" aria-hidden="true">
@@ -2259,6 +2438,12 @@
       document.getElementById('path').value = data.cwd;
       const list = document.getElementById('list');
       list.innerHTML = '';
+
+      // 长按空白处：显示“粘贴到当前目录”等操作
+      try {
+        installListLongPress(list, { cwd: data.cwd, root: data.root });
+      } catch {}
+
       // add parent shortcut if not root
       if (data.cwd !== data.root) {
         const parent = document.createElement('div');
@@ -2289,6 +2474,10 @@
         div.appendChild(tag);
         
         div.onclick = () => {
+          // 长按菜单触发后，避免随后的 click 再执行“打开/进入”
+          try {
+            if (div.__lanFsLongPressFiredAt && (Date.now() - div.__lanFsLongPressFiredAt) < 800) return;
+          } catch {}
           if (it.isDir) {
             const next = join(data.cwd, it.name);
             loadDir(next);
@@ -2308,6 +2497,9 @@
 
         // 桌面端双击打开文件编辑器（不影响目录单击进入）
         div.ondblclick = () => {
+          try {
+            if (div.__lanFsLongPressFiredAt && (Date.now() - div.__lanFsLongPressFiredAt) < 800) return;
+          } catch {}
           if (!it.isDir && !it.isExe) {
             const full = join(data.cwd, it.name);
             if (isArchiveFileName(it.name)) {
@@ -2316,6 +2508,21 @@
               openEditor(full);
             }
           }
+        };
+
+        // 长按/右键：弹出文件操作菜单
+        installItemLongPress(div, {
+          cwd: data.cwd,
+          root: data.root,
+          item: it,
+          fullPath: join(data.cwd, it.name),
+        });
+
+        div.oncontextmenu = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          try { openOpMenu({ cwd: data.cwd, item: it, fullPath: join(data.cwd, it.name) }); } catch {}
+          return false;
         };
         list.appendChild(div);
       });
@@ -2499,6 +2706,287 @@
 	      }, true);
 
 	      window.__lanShellOpenExtractModal = open;
+	    }
+
+	    // -----------------------
+	    // 文件操作：长按菜单 + 复制/剪切/重命名/删除/粘贴
+	    // -----------------------
+	    let fsClipboard = null; // { mode:'copy'|'move', src, name, isDir }
+
+	    function openOpMenu({ cwd, item, fullPath }) {
+	      const backdrop = document.getElementById('op-modal-backdrop');
+	      const modal = document.getElementById('op-modal');
+	      const closeBtn = document.getElementById('opCloseBtn');
+	      const title = document.getElementById('op-title');
+	      const pathEl = document.getElementById('op-path');
+	      const actions = document.getElementById('op-actions');
+	      if (!backdrop || !modal) return;
+
+	      function close() {
+	        backdrop.classList.remove('open');
+	        modal.classList.remove('open');
+	      }
+
+	      backdrop.onclick = close;
+	      closeBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); close(); };
+
+	      title.textContent = item.isDir ? '文件夹操作' : '文件操作';
+	      pathEl.textContent = fullPath;
+	      actions.innerHTML = '';
+
+	      function addBtn(text, cls, handler) {
+	        const b = document.createElement('button');
+	        b.textContent = text;
+	        if (cls) b.className = cls;
+	        b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); handler(); };
+	        actions.appendChild(b);
+	      }
+
+	      addBtn('重命名', '', () => {
+	        close();
+	        const nn = prompt('输入新名称', item.name);
+	        if (!nn || nn.trim() === item.name) return;
+	        renameEntry(fullPath, nn.trim());
+	      });
+
+	      addBtn('复制', '', () => {
+	        close();
+	        fsClipboard = { mode: 'copy', src: fullPath, name: item.name, isDir: !!item.isDir };
+	        showToast('✅ 已复制到剪贴板（站内）');
+	      });
+
+	      addBtn('剪切', '', () => {
+	        close();
+	        fsClipboard = { mode: 'move', src: fullPath, name: item.name, isDir: !!item.isDir };
+	        showToast('✅ 已剪切到剪贴板（站内）');
+	      });
+
+	      addBtn('删除', 'danger', () => {
+	        close();
+	        const ok = confirm(`确定删除：${fullPath} ?\n该操作不可撤销。`);
+	        if (!ok) return;
+	        deleteEntry(fullPath);
+	      });
+
+	      if (isArchiveFileName(item.name)) {
+	        addBtn('解压', 'primary', () => {
+	          close();
+	          try { window.__lanShellOpenExtractModal?.({ archivePath: fullPath, defaultDest: cwd }); } catch {}
+	        });
+	      }
+
+	      // 若剪贴板有内容且当前对象为目录，可在此目录中粘贴
+	      if (fsClipboard && item.isDir) {
+	        addBtn('粘贴到此', 'primary', () => {
+	          close();
+	          openXferModal({
+	            mode: fsClipboard.mode,
+	            src: fsClipboard.src,
+	            defaultDest: fullPath,
+	            defaultName: fsClipboard.name,
+	          });
+	        });
+	      }
+
+	      backdrop.classList.add('open');
+	      modal.classList.add('open');
+
+	      document.addEventListener('keydown', function esc(e) {
+	        if (e.key === 'Escape' && modal.classList.contains('open')) {
+	          e.preventDefault();
+          close();
+	          document.removeEventListener('keydown', esc, true);
+	        }
+	      }, true);
+	    }
+
+	    function installItemLongPress(el, ctx) {
+	      let timer = null;
+	      const delay = 520;
+	      el.addEventListener('touchstart', (e) => {
+	        timer = setTimeout(() => {
+	          try { openOpMenu(ctx); } catch {}
+	          try { el.__lanFsLongPressFiredAt = Date.now(); } catch {}
+	        }, delay);
+	      }, { passive: true });
+	      el.addEventListener('touchend', () => { if (timer) clearTimeout(timer); timer = null; }, { passive: true });
+	      el.addEventListener('touchcancel', () => { if (timer) clearTimeout(timer); timer = null; }, { passive: true });
+	      // 兼容桌面长按（mouse）
+	      el.addEventListener('mousedown', (e) => {
+	        if (e.buttons !== 1) return;
+	        timer = setTimeout(() => {
+	          try { openOpMenu(ctx); } catch {}
+	        }, delay);
+	      });
+	      el.addEventListener('mouseup', () => { if (timer) clearTimeout(timer); timer = null; });
+	      el.addEventListener('mouseleave', () => { if (timer) clearTimeout(timer); timer = null; });
+	    }
+
+	    function installListLongPress(el, { cwd }) {
+	      if (!el) return;
+	      let timer = null;
+	      const delay = 520;
+	      el.addEventListener('touchstart', () => {
+	        timer = setTimeout(() => {
+	          if (!fsClipboard) {
+	            showToast('剪贴板为空（先复制/剪切一个文件）');
+	            return;
+	          }
+	          openXferModal({
+	            mode: fsClipboard.mode,
+	            src: fsClipboard.src,
+	            defaultDest: cwd,
+	            defaultName: fsClipboard.name,
+	          });
+	        }, delay);
+	      }, { passive: true });
+	      el.addEventListener('touchend', () => { if (timer) clearTimeout(timer); timer = null; }, { passive: true });
+	      el.addEventListener('touchcancel', () => { if (timer) clearTimeout(timer); timer = null; }, { passive: true });
+	    }
+
+	    async function deleteEntry(pathStr) {
+	      try {
+	        const res = await fetch(`/api/fs/delete?token=${encodeURIComponent(authToken)}`, {
+	          method: 'POST',
+	          headers: { 'Content-Type': 'application/json' },
+	          body: JSON.stringify({ path: pathStr }),
+	        });
+	        if (!res.ok) {
+	          let msg = `删除失败（${res.status}）`;
+	          try { const j = await res.json(); if (j?.error) msg = `删除失败：${j.error}`; } catch {}
+	          showToast(`❌ ${msg}`);
+	          return;
+	        }
+	        showToast('✅ 已删除');
+	        await loadDir(document.getElementById('path')?.value || '.');
+	      } catch (e) {
+	        showToast(`❌ 删除失败：${e?.message || e}`);
+	      }
+	    }
+
+	    async function renameEntry(pathStr, newName) {
+	      try {
+	        const res = await fetch(`/api/fs/rename?token=${encodeURIComponent(authToken)}`, {
+	          method: 'POST',
+	          headers: { 'Content-Type': 'application/json' },
+	          body: JSON.stringify({ path: pathStr, newName }),
+	        });
+	        if (!res.ok) {
+	          let msg = `重命名失败（${res.status}）`;
+	          try { const j = await res.json(); if (j?.error) msg = `重命名失败：${j.error}`; } catch {}
+	          showToast(`❌ ${msg}`);
+	          return;
+	        }
+	        showToast('✅ 已重命名');
+	        await loadDir(document.getElementById('path')?.value || '.');
+	      } catch (e) {
+	        showToast(`❌ 重命名失败：${e?.message || e}`);
+	      }
+	    }
+
+	    function openXferModal({ mode, src, defaultDest, defaultName } = {}) {
+	      const backdrop = document.getElementById('xfer-modal-backdrop');
+	      const modal = document.getElementById('xfer-modal');
+	      const closeBtn = document.getElementById('xferCloseBtn');
+	      const cancelBtn = document.getElementById('xferCancelBtn');
+	      const okBtn = document.getElementById('xferOkBtn');
+	      const title = document.getElementById('xfer-title');
+	      const srcInput = document.getElementById('xfer-src');
+	      const destDirInput = document.getElementById('xfer-dest-dir');
+	      const destNameInput = document.getElementById('xfer-dest-name');
+	      const conflictSel = document.getElementById('xfer-conflict');
+	      const dirList = document.getElementById('xfer-dir-list');
+
+	      if (!backdrop || !modal) return;
+
+	      let browsing = defaultDest || '.';
+
+	      async function renderDir(dir) {
+	        const res = await fetch(`/api/fs?path=${encodeURIComponent(dir)}&token=${encodeURIComponent(authToken)}`);
+	        if (!res.ok) {
+	          showToast('❌ 读取目录失败');
+	          return;
+	        }
+          const data = await res.json();
+	        browsing = data.cwd;
+	        destDirInput.value = browsing;
+	        dirList.innerHTML = '';
+	        if (data.cwd !== data.root) {
+	          const up = document.createElement('div');
+	          up.className = 'dir-item';
+	          up.textContent = '⬆️ ..';
+	          up.onclick = () => {
+	            const parent = browsing.split('/').slice(0, -1).join('/') || '/';
+	            renderDir(parent);
+	          };
+	          dirList.appendChild(up);
+	        }
+	        (data.items || []).forEach((it) => {
+	          if (!it?.isDir) return;
+	          const row = document.createElement('div');
+	          row.className = 'dir-item';
+	          row.innerHTML = `<span>📁</span><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${it.name}</span>`;
+	          row.onclick = () => renderDir(join(browsing, it.name));
+	          dirList.appendChild(row);
+	        });
+	      }
+
+	      function close() {
+	        backdrop.classList.remove('open');
+	        modal.classList.remove('open');
+	      }
+
+	      async function submit() {
+	        const destDir = (destDirInput.value || '').trim() || '.';
+	        const destName = (destNameInput.value || '').trim() || defaultName || '';
+	        if (!src || !destDir) { showToast('⚠️ 参数缺失'); return; }
+
+	        okBtn.disabled = true; cancelBtn.disabled = true;
+	        try {
+	          const payload = { src, destDir, destName, conflict: conflictSel.value };
+	          const api = mode === 'move' ? '/api/fs/move' : '/api/fs/copy';
+	          const res = await fetch(`${api}?token=${encodeURIComponent(authToken)}`, {
+	            method: 'POST',
+	            headers: { 'Content-Type': 'application/json' },
+	            body: JSON.stringify(payload),
+	          });
+	          if (!res.ok) {
+	            let msg = `${mode === 'move' ? '移动' : '复制'}失败（${res.status}）`;
+	            try { const j = await res.json(); if (j?.error) msg = `${mode === 'move' ? '移动' : '复制'}失败：${j.error}`; } catch {}
+	            showToast(`❌ ${msg}`);
+	            return;
+	          }
+	          showToast(mode === 'move' ? '✅ 已移动' : '✅ 已复制');
+	          fsClipboard = null; // 剪切完成后清空
+	          close();
+	          await loadDir(document.getElementById('path')?.value || '.');
+	        } catch (e) {
+	          showToast(`❌ ${mode === 'move' ? '移动' : '复制'}失败：${e?.message || e}`);
+	        } finally {
+	          okBtn.disabled = false; cancelBtn.disabled = false;
+	        }
+	      }
+
+	      title.textContent = mode === 'move' ? '移动到...' : '复制到...';
+	      srcInput.value = src || '';
+	      destNameInput.value = defaultName || '';
+	      conflictSel.value = 'error';
+	      backdrop.classList.add('open');
+	      modal.classList.add('open');
+	      renderDir(defaultDest || '.');
+
+	      backdrop.onclick = close;
+	      closeBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); close(); };
+	      cancelBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); close(); };
+	      okBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); submit(); };
+
+	      document.addEventListener('keydown', function esc(e) {
+	        if (e.key === 'Escape' && modal.classList.contains('open')) {
+	          e.preventDefault();
+	          close();
+	          document.removeEventListener('keydown', esc, true);
+	        }
+	      }, true);
 	    }
 
 	    // -----------------------
