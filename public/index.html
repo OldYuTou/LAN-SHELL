@@ -1919,12 +1919,11 @@
 			        <div class="cmdset-title">Git</div>
 			        <div class="cmdset-subtitle" id="gitCwdText">—</div>
 			      </div>
-			      <div class="cmdset-actions">
-			        <button id="gitRefreshBtn" class="cmdset-icon-btn" title="刷新">⟳</button>
-			        <button id="gitBranchSwitchBtn" class="cmdset-icon-btn" title="切换分支">⤴</button>
-			        <button id="gitBranchNewBtn" class="cmdset-icon-btn" title="新建分支">＋</button>
-			      </div>
-			    </div>
+        <div class="cmdset-actions">
+          <button id="gitRefreshBtn" class="cmdset-icon-btn" title="刷新">⟳</button>
+          <button id="gitBranchSwitchBtn" class="cmdset-icon-btn" title="切换分支">⤴</button>
+        </div>
+      </div>
 			    <div class="cmdset-body">
 			      <div id="gitInfoBox" class="cmdset-empty"></div>
 			      <div id="gitList"></div>
@@ -1985,19 +1984,20 @@
 
 			  <!-- Git 回退弹窗（长按最新未推送提交） -->
 			  <div id="git-reset-backdrop" aria-hidden="true"></div>
-			  <div id="git-reset-modal" role="dialog" aria-modal="true" aria-hidden="true">
-			    <div class="row">
-			      <div class="title">回退到此提交</div>
-			      <button class="close" id="gitResetCloseBtn" title="Close">×</button>
-			    </div>
-			    <div id="gitResetDesc" class="desc"></div>
-			    <div class="actions">
-			      <button id="gitResetCancelBtn">取消</button>
-			      <button id="gitRevertBtn">Revert</button>
-			      <button id="gitResetSoftBtn" class="primary">软回退</button>
-			      <button id="gitResetHardBtn" class="danger">硬回退</button>
-			    </div>
-			  </div>
+    <div id="git-reset-modal" role="dialog" aria-modal="true" aria-hidden="true">
+      <div class="row">
+        <div class="title">回退到此提交</div>
+        <button class="close" id="gitResetCloseBtn" title="Close">×</button>
+      </div>
+      <div id="gitResetDesc" class="desc"></div>
+      <div class="actions">
+        <button id="gitResetCancelBtn">取消</button>
+        <button id="gitBranchFromCommitBtn">从此提交新建分支</button>
+        <button id="gitRevertBtn">Revert</button>
+        <button id="gitResetSoftBtn" class="primary">软回退</button>
+        <button id="gitResetHardBtn" class="danger">硬回退</button>
+      </div>
+    </div>
 
 			  <!-- 指令集：新建弹窗 -->
 			  <div id="cmdset-modal-backdrop" aria-hidden="true"></div>
@@ -5138,7 +5138,7 @@
       newBranchModal.nameInput = document.getElementById('gitNewBranchName');
 
       const branchSwitchBtn = document.getElementById('gitBranchSwitchBtn');
-      const branchNewBtn = document.getElementById('gitBranchNewBtn');
+      const branchNewBtn = null; // 已移除顶部新建按钮，改为在 commit 长按弹窗操作
 
       if (branchSwitchBtn) branchSwitchBtn.onclick = async (e) => {
         e.preventDefault(); e.stopPropagation();
