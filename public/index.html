@@ -2751,14 +2751,25 @@
 
 	      addBtn('复制', '', () => {
 	        close();
+	        // 立即弹出目录选择器；同时把剪贴板同步为备用
 	        fsClipboard = { mode: 'copy', src: fullPath, name: item.name, isDir: !!item.isDir };
-	        showToast('✅ 已复制到剪贴板（站内）');
+	        openXferModal({
+	          mode: 'copy',
+	          src: fullPath,
+	          defaultDest: cwd,
+	          defaultName: item.name,
+	        });
 	      });
 
 	      addBtn('剪切', '', () => {
 	        close();
 	        fsClipboard = { mode: 'move', src: fullPath, name: item.name, isDir: !!item.isDir };
-	        showToast('✅ 已剪切到剪贴板（站内）');
+	        openXferModal({
+	          mode: 'move',
+	          src: fullPath,
+	          defaultDest: cwd,
+	          defaultName: item.name,
+	        });
 	      });
 
 	      addBtn('删除', 'danger', () => {

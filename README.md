@@ -19,7 +19,7 @@
 - 文件浏览：在限定根目录内浏览文件/目录（只读列目录信息）
 - 文本编辑：在左侧文件列表点击/双击文本文件，在右侧以“文件名 Tab”打开编辑器；支持行号、保存/重载、触控板手势方向键移动光标并自动滚动到光标
 - 解压归档：点击压缩包/归档文件（如 `.zip`、`.tar.gz`），弹出解压提示并可选择目标目录（默认解压到压缩包所在目录）
-- 文件操作：长按/右键文件可删除/重命名/复制/剪切/粘贴（目录可合并且提供冲突策略），压缩包另有“解压”入口
+- 文件操作：长按/右键文件可删除/重命名/复制/剪切，点击复制/剪切即弹出目录选择器（目录可合并并提供冲突策略）；压缩包另有“解压”入口
 - 一次性命令运行：`/api/run` 以 SSE 方式实时返回输出（并受允许命令白名单限制）
 - 指令集（预设命令）持久化：存储到 `data/command-sets.json`，便于多设备共享
 - 移动端手势：终端区域单指滑动用于滚动；底部空白区域单指滑动发送方向键移动光标；二指点按复制“最后一次输出”；二指长按触发粘贴（无剪贴板权限时自动打开粘贴输入框）
@@ -154,7 +154,7 @@ A LAN-friendly Web Shell built with Node.js. Open a web page in your browser to 
 - File browsing: List files/directories within a configured root (read-only listing)
 - Text editor: Tap/double-click a text file in the left panel to open an editor tab on the right, with line numbers, save/reload, and cursor-pad swipe to move the caret (auto-scroll into view)
 - Archive extract: Tap an archive file (e.g. `.zip`, `.tar.gz`) to open an extract dialog with a destination directory picker (defaults to the archive's directory)
-- File ops: Long-press/right-click a file to delete/rename/copy/move/paste (folders merge with conflict policy); archive files also show “Extract”
+- File ops: Long-press/right-click to delete/rename/copy/move; copy/move opens a destination picker immediately (folders merge with conflict policy); archive files also show “Extract”
 - One-shot command runner: `/api/run` streams output via SSE (restricted by an allowlist)
 - Persistent command sets: Stored in `data/command-sets.json` for sharing across devices
 - Mobile gestures: One-finger swipe inside the terminal scrolls; one-finger swipe on the bottom blank area sends arrow keys (cursor movement); two-finger tap copies the latest output; two-finger long-press triggers paste (falls back to a paste input modal if clipboard access is blocked)
