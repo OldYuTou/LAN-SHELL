@@ -1670,10 +1670,15 @@
 			      <label>新建空白文件名</label>
 			      <input id="newFileNameInput" placeholder="例如：notes.txt" spellcheck="false" autocapitalize="off" autocorrect="off" />
 			    </div>
+			    <div class="file-modal-field" style="margin-top:10px;">
+			      <label>新建文件夹名</label>
+			      <input id="newDirNameInput" placeholder="例如：docs" spellcheck="false" autocapitalize="off" autocorrect="off" />
+			    </div>
 			    <input id="uploadFileInput" type="file" style="display:none;" />
 			    <div class="file-modal-actions">
 			      <button id="uploadBtn">上传文件</button>
 			      <button id="createEmptyFileBtn" class="primary">新建空白文件</button>
+			      <button id="createEmptyDirBtn" class="primary">新建文件夹</button>
 			    </div>
 			  </div>
 
@@ -2984,7 +2989,9 @@
 	      const closeBtn = document.getElementById('fileModalCloseBtn');
 	      const dirInput = document.getElementById('fileModalDir');
 	      const nameInput = document.getElementById('newFileNameInput');
+	      const dirNameInput = document.getElementById('newDirNameInput');
 	      const createBtn = document.getElementById('createEmptyFileBtn');
+	      const createDirBtn = document.getElementById('createEmptyDirBtn');
 	      const uploadBtn = document.getElementById('uploadBtn');
 	      const uploadInput = document.getElementById('uploadFileInput');
 
@@ -3052,6 +3059,35 @@
 	          openEditor(full);
 	        } catch (err) {
 	          showToast(`❌ 新建失败：${err?.message || err}`);
+	        }
+	      };
+
+	      createDirBtn.onclick = async (e) => {
+	        e.preventDefault();
+	        e.stopPropagation();
+	        const dir = (dirInput.value || '').trim() || '.';
+	        const name = (dirNameInput.value || '').trim();
+	        if (!name) {
+	          showToast('⚠️ 请输入文件夹名');
+	          return;
+	        }
+	        try {
+	          const res = await fetch(`/api/fs/mkdir?token=${encodeURIComponent(authToken)}`, {
+	            method: 'POST',
+	            headers: { 'Content-Type': 'application/json' },
+	            body: JSON.stringify({ dir, name }),
+	          });
+	          if (!res.ok) {
+	            let msg = `新建文件夹失败（${res.status}）`;
+	            try { const j = await res.json(); if (j?.error) msg = `新建文件夹失败：${j.error}`; } catch {}
+	            showToast(`❌ ${msg}`);
+	            return;
+	          }
+	          showToast('✅ 已新建文件夹');
+	          close();
+	          await refreshDir();
+	        } catch (err) {
+	          showToast(`❌ 新建文件夹失败：${err?.message || err}`);
 	        }
 	      };
 

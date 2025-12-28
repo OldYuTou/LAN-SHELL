@@ -508,6 +508,29 @@ app.post('/api/upload', (req, res) => {
   }
 });
 
+// 新建空白目录（NO AUTH）
+app.post('/api/fs/mkdir', (req, res) => {
+  const body = req.body || {};
+  const dirRaw = body.dir;
+  const nameRaw = body.name;
+  const dir = resolvePathFromQuery(dirRaw);
+  if (!dir.ok) return res.status(403).json({ error: dir.error });
+  const nm = validateFileName(nameRaw);
+  if (!nm.ok) return res.status(400).json({ error: nm.error });
+  const target = path.join(dir.target, nm.name);
+  if (!withinRoot(target)) return res.status(403).json({ error: 'out of root' });
+  try {
+    // 确保父目录存在
+    fs.mkdirSync(dir.target, { recursive: true });
+    if (fs.existsSync(target)) return res.status(409).json({ error: 'exists' });
+    fs.mkdirSync(target, { recursive: false });
+    const st = fs.statSync(target);
+    return res.json({ ok: true, path: target, mtimeMs: st.mtimeMs });
+  } catch (e) {
+    return res.status(500).json({ error: e?.message || 'mkdir failed' });
+  }
+});
+
 // 上传文件（二进制流式）（NO AUTH）
 // - 适用于大文件（如 60MB 以上），避免 base64 膨胀与 btoa/JSON 限制
 // - 使用临时文件写入后 rename，保证写入原子性
