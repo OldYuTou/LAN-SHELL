@@ -42,8 +42,9 @@ const ALLOWED_CMDS = (process.env.ALLOWED_CMDS || 'npm,node,yarn,pnpm,ls,bash')
 const HISTORY_MAX_CHARS = Number.parseInt(process.env.HISTORY_MAX_CHARS || '', 10) || 500000;
 
 const app = express();
-// 文本编辑/上传会走 JSON；实际可写入大小由各 API 的限制控制
-app.use(express.json({ limit: '32mb' }));
+// 文本编辑会走 JSON；实际可写入大小由各 API 的限制控制
+// 注意：大文件上传走 /api/upload-raw（二进制流式写入），避免 base64 带来的体积膨胀与内存占用。
+app.use(express.json({ limit: '8mb' }));
 
 // 指令集（预设命令）持久化：存到服务端文件，便于多设备共享（NO AUTH）
 const DATA_DIR = path.join(__dirname, 'data');
@@ -243,7 +244,7 @@ app.get('/api/fs', (req, res) => {
 // - 为了避免覆盖外部修改，PUT 支持带 mtimeMs 的乐观锁（不传则直接写入）
 const MAX_TEXT_FILE_BYTES = 2 * 1024 * 1024; // 2MB
 const BINARY_SNIFF_BYTES = 8 * 1024; // 8KB
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10MB
+const MAX_UPLOAD_BYTES = Number.parseInt(process.env.MAX_UPLOAD_BYTES || '', 10) || (200 * 1024 * 1024); // 默认 200MB
 
 function resolvePathFromQuery(raw) {
   const p = (raw ?? '.').toString();
@@ -259,6 +260,57 @@ function validateFileName(name) {
   if (n.includes('/') || n.includes('\\')) return { ok: false, error: 'name must not contain path separators', name: null };
   if (n.includes('\0')) return { ok: false, error: 'invalid name', name: null };
   return { ok: true, name: n };
+}
+
+function unlinkQuiet(p) {
+  try {
+    if (p && fs.existsSync(p)) fs.unlinkSync(p);
+  } catch {}
+}
+
+function streamToFileWithLimit(req, tmpPath, limitBytes) {
+  return new Promise((resolve, reject) => {
+    let written = 0;
+    const out = fs.createWriteStream(tmpPath);
+    let finished = false;
+
+    function done(err) {
+      if (finished) return;
+      finished = true;
+      try { out.destroy(); } catch {}
+      if (err) {
+        unlinkQuiet(tmpPath);
+        reject(err);
+      } else {
+        resolve({ bytes: written });
+      }
+    }
+
+    req.on('aborted', () => done(new Error('client aborted')));
+    req.on('error', (e) => done(e));
+    out.on('error', (e) => done(e));
+
+    req.on('data', (chunk) => {
+      written += chunk?.length || 0;
+      if (written > limitBytes) {
+        // 超限：立刻中止读取与写入
+        try { req.pause(); } catch {}
+        try { req.destroy(new Error('payload too large')); } catch {}
+        try { out.destroy(new Error('payload too large')); } catch {}
+        return;
+      }
+      const ok = out.write(chunk);
+      if (!ok) req.pause();
+    });
+
+    out.on('drain', () => {
+      try { req.resume(); } catch {}
+    });
+
+    req.on('end', () => {
+      out.end(() => done());
+    });
+  });
 }
 
 function looksBinary(buf) {
@@ -394,6 +446,55 @@ app.post('/api/upload', (req, res) => {
     const st = fs.statSync(target);
     return res.json({ ok: true, path: target, size: st.size, mtimeMs: st.mtimeMs });
   } catch (e) {
+    return res.status(500).json({ error: e?.message || 'upload failed' });
+  }
+});
+
+// 上传文件（二进制流式）（NO AUTH）
+// - 适用于大文件（如 60MB 以上），避免 base64 膨胀与 btoa/JSON 限制
+// - 使用临时文件写入后 rename，保证写入原子性
+app.post('/api/upload-raw', async (req, res) => {
+  const dirRaw = req.query.dir;
+  const nameRaw = req.query.name;
+  const overwrite = String(req.query.overwrite || '').trim() === '1' || String(req.query.overwrite || '').trim().toLowerCase() === 'true';
+
+  const dir = resolvePathFromQuery(dirRaw);
+  if (!dir.ok) return res.status(403).json({ error: dir.error });
+
+  const nm = validateFileName(nameRaw);
+  if (!nm.ok) return res.status(400).json({ error: nm.error });
+
+  try {
+    const st = fs.statSync(dir.target);
+    if (!st.isDirectory()) return res.status(400).json({ error: 'dir is not a directory' });
+  } catch (e) {
+    return res.status(400).json({ error: e?.message || 'dir invalid' });
+  }
+
+  const target = path.join(dir.target, nm.name);
+  if (!withinRoot(target)) return res.status(403).json({ error: 'out of root' });
+
+  try {
+    if (fs.existsSync(target) && !overwrite) return res.status(409).json({ error: 'file exists' });
+  } catch {}
+
+  const tmp = `${target}.${process.pid}.upload.tmp`;
+  try {
+    // 清理可能残留的 tmp（极端情况下上次异常退出）
+    unlinkQuiet(tmp);
+
+    const { bytes } = await streamToFileWithLimit(req, tmp, MAX_UPLOAD_BYTES);
+
+    // 写入完成后原子替换
+    fs.renameSync(tmp, target);
+    const st2 = fs.statSync(target);
+    return res.json({ ok: true, path: target, size: st2.size, mtimeMs: st2.mtimeMs, bytes });
+  } catch (e) {
+    if (String(e?.message || '').includes('payload too large')) {
+      unlinkQuiet(tmp);
+      return res.status(413).json({ error: `file too large (>${MAX_UPLOAD_BYTES} bytes)` });
+    }
+    unlinkQuiet(tmp);
     return res.status(500).json({ error: e?.message || 'upload failed' });
   }
 });

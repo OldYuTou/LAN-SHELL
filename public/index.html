@@ -2261,21 +2261,17 @@
 	        const dir = (dirInput.value || '').trim() || '.';
 	        const name = file.name || 'upload.bin';
 	        try {
-	          const buf = await file.arrayBuffer();
-	          const bytes = new Uint8Array(buf);
-	          // 转 base64（兼容二进制）
-	          let binary = '';
-	          const chunk = 0x8000;
-	          for (let i = 0; i < bytes.length; i += chunk) {
-	            binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-	          }
-	          const b64 = btoa(binary);
-
-	          async function doUpload({ overwrite = false } = {}) {
-	            const res = await fetch(`/api/upload?token=${encodeURIComponent(authToken)}`, {
+	          async function doUploadRaw({ overwrite = false } = {}) {
+	            const q = new URLSearchParams({
+	              dir,
+	              name,
+	              overwrite: overwrite ? '1' : '0',
+	              token: authToken || '',
+	            });
+	            const res = await fetch(`/api/upload-raw?${q.toString()}`, {
 	              method: 'POST',
-	              headers: { 'Content-Type': 'application/json' },
-	              body: JSON.stringify({ dir, name, dataBase64: b64, overwrite }),
+	              headers: { 'Content-Type': 'application/octet-stream' },
+	              body: file,
 	            });
 	            if (res.status === 409) return { ok: false, conflict: true };
 	            if (!res.ok) {
@@ -2287,11 +2283,11 @@
 	            return { ok: true };
 	          }
 
-	          const r1 = await doUpload({ overwrite: false });
+	          const r1 = await doUploadRaw({ overwrite: false });
 	          if (!r1.ok && r1.conflict) {
 	            const ok = confirm(`文件已存在：${name}\n\n“确定”=覆盖\n“取消”=不上传`);
 	            if (!ok) return;
-	            const r2 = await doUpload({ overwrite: true });
+	            const r2 = await doUploadRaw({ overwrite: true });
 	            if (!r2.ok) return;
 	          } else if (!r1.ok) {
 	            return;
