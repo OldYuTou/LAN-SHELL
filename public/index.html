@@ -213,6 +213,11 @@
       border-color: rgba(45, 140, 255, 0.55);
       color:#fff;
     }
+    #sidebar-actions button.ghost {
+      background: rgba(255,255,255,0.12);
+      border-color: rgba(0,0,0,0.12);
+      color:#111;
+    }
 
     /* 新建/上传弹窗 */
     #file-modal-backdrop {
@@ -1592,6 +1597,7 @@
         <span>文件浏览器</span>
         <span class="spacer"></span>
         <div id="sidebar-actions">
+          <button id="toggleHiddenBtn" class="ghost" title="显示隐藏文件">显示隐藏</button>
           <button id="newFileBtn" class="primary" title="新建/上传">＋</button>
         </div>
       </div>
@@ -2403,11 +2409,12 @@
 		      }
 		    }
 
-		    const clientId = getClientId();
+    const clientId = getClientId();
 
-		    let sessions = [];
-		    let activeId = null;
-		    let counter = 1;
+    let sessions = [];
+    let activeId = null;
+    let counter = 1;
+    let showHiddenFiles = false;
 
     // 加载现有会话
 	    async function loadExistingSessions() {
@@ -2451,7 +2458,9 @@
         };
         list.appendChild(parent);
       }
-      data.items.forEach(it => {
+      data.items
+        .filter(it => showHiddenFiles || !String(it?.name || '').startsWith('.'))
+        .forEach(it => {
         const div = document.createElement('div');
         div.className = 'item';
         
@@ -2552,6 +2561,30 @@
 	      } catch {
 	        return '.';
 	      }
+	    }
+
+	    function installHiddenToggle() {
+	      const btn = document.getElementById('toggleHiddenBtn');
+	      if (!btn) return;
+
+	      const KEY = 'lanshell_show_hidden';
+	      try {
+	        const saved = localStorage.getItem(KEY);
+	        showHiddenFiles = saved === '1';
+	      } catch {}
+
+	      function sync() {
+	        btn.textContent = showHiddenFiles ? '隐藏隐藏' : '显示隐藏';
+	        btn.title = showHiddenFiles ? '不显示以 . 开头的文件' : '显示以 . 开头的文件';
+	      }
+	      sync();
+
+	      btn.onclick = () => {
+	        showHiddenFiles = !showHiddenFiles;
+	        try { localStorage.setItem(KEY, showHiddenFiles ? '1' : '0'); } catch {}
+	        sync();
+	        loadDir(document.getElementById('path')?.value || '.');
+	      };
 	    }
 
 	    // -----------------------
@@ -5835,15 +5868,17 @@
       // 初始化 Git 页面
       initGitPage();
 
-		      // 初始化文件新建/上传
-		      installFileModal();
-		      // 初始化解压弹窗
-		      installExtractModal();
+      // 初始化文件新建/上传
+      installFileModal();
+      // 初始化解压弹窗
+      installExtractModal();
+      // 初始化“显示隐藏文件”开关
+      installHiddenToggle();
 
-		      initSideActions();
-		      loadDir('.');
-		      initializeTerminals();
-		    }
+      initSideActions();
+      loadDir('.');
+      initializeTerminals();
+    }
 
     // 页面初始化（确保只执行一次，避免重复创建终端会话）
     document.addEventListener('DOMContentLoaded', () => {
