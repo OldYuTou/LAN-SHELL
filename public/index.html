@@ -1818,10 +1818,12 @@
 			        <div class="cmdset-title">Git</div>
 			        <div class="cmdset-subtitle" id="gitCwdText">—</div>
 			      </div>
-			      <div class="cmdset-actions">
-			        <button id="gitRefreshBtn" class="cmdset-icon-btn" title="刷新">⟳</button>
-			      </div>
-			    </div>
+        <div class="cmdset-actions">
+          <button id="gitRefreshBtn" class="cmdset-icon-btn" title="刷新">⟳</button>
+          <button id="gitBranchSwitchBtn" class="cmdset-icon-btn" title="切换分支">⤴</button>
+          <button id="gitBranchNewBtn" class="cmdset-icon-btn" title="新建分支">＋</button>
+        </div>
+      </div>
 			    <div class="cmdset-body">
 			      <div id="gitInfoBox" class="cmdset-empty"></div>
 			      <div id="gitList"></div>
@@ -4623,6 +4625,69 @@
 			        return data;
 			      }
 
+			      async function fetchBranches(cwd) {
+			        return fetchJson(`/api/git/branches?cwd=${encodeURIComponent(cwd)}`);
+			      }
+
+			      function pickBranchDialog({ locals = [], remotes = [], current }) {
+			        const all = [...locals, ...remotes.filter(r => !locals.includes(r))];
+			        const hint = all.length ? `可选：\n${all.slice(0,30).join('\n')}\n\n` : '';
+			        const val = prompt(`${hint}输入要切换的分支名称（当前：${current || '-'}）`);
+			        if (!val) return null;
+			        return val.trim();
+			      }
+
+			      async function doSwitchBranch({ force = false } = {}) {
+			        const cwd = getTargetCwd();
+			        try {
+			          const br = await fetchBranches(cwd);
+			          if (!br?.isRepo) { showToast('⚠️ 不是 Git 仓库'); return; }
+			          const sel = pickBranchDialog({ locals: br.locals || [], remotes: br.remotes || [], current: br.current });
+			          if (!sel) return;
+			          const res = await fetch('/api/git/checkout', {
+			            method: 'POST',
+			            headers: { 'Content-Type': 'application/json' },
+			            body: JSON.stringify({ cwd, branch: sel, force }),
+			          });
+			          const data = await res.json().catch(() => ({}));
+			          if (!res.ok) {
+			            if (res.status === 409 && !force) {
+			              const ok = confirm('工作区存在未提交修改，确定强制切换并丢弃这些修改？');
+			              if (ok) return doSwitchBranch({ force: true });
+			              return;
+			            }
+			            throw new Error(data?.error || `HTTP ${res.status}`);
+			          }
+			          showToast(`✅ 已切换到 ${data?.current || sel}`);
+			          refresh({ allowInitPrompt: false }).catch(() => {});
+			        } catch (e) {
+			          showToast(`❌ 切换失败：${e?.message || e}`);
+			        }
+			      }
+
+			      async function doCreateBranch() {
+			        const cwd = getTargetCwd();
+			        try {
+			          const from = prompt('从哪个提交/分支创建？(默认 HEAD)', 'HEAD') || 'HEAD';
+			          const name = prompt('新分支名称');
+			          if (!name || !name.trim()) return;
+			          const res = await fetch('/api/git/checkout-new', {
+			            method: 'POST',
+			            headers: { 'Content-Type': 'application/json' },
+			            body: JSON.stringify({ cwd, branch: name.trim(), from: from.trim() }),
+			          });
+			          const data = await res.json().catch(() => ({}));
+			          if (!res.ok) {
+			            if (res.status === 409) throw new Error('工作区脏，请先提交/暂存或清理');
+			            throw new Error(data?.error || `HTTP ${res.status}`);
+			          }
+			          showToast(`✅ 已创建并切换到 ${data?.current || name.trim()}`);
+			          refresh({ allowInitPrompt: false }).catch(() => {});
+			        } catch (e) {
+			          showToast(`❌ 新建分支失败：${e?.message || e}`);
+			        }
+			      }
+
 			      async function refresh({ allowInitPrompt = false } = {}) {
 			        if (state.loading) return;
 			        state.loading = true;
@@ -4769,16 +4834,20 @@
 			        }
 			      }
 
-			      backBtn.onclick = (e) => {
-			        e.preventDefault();
-			        e.stopPropagation();
-			        closePage();
-			      };
-			      refreshBtn.onclick = (e) => {
-			        e.preventDefault();
-			        e.stopPropagation();
-			        refresh({ allowInitPrompt: false }).catch(() => {});
-			      };
+      backBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closePage();
+      };
+      refreshBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        refresh({ allowInitPrompt: false }).catch(() => {});
+      };
+      const branchSwitchBtn = document.getElementById('gitBranchSwitchBtn');
+      const branchNewBtn = document.getElementById('gitBranchNewBtn');
+      if (branchSwitchBtn) branchSwitchBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); doSwitchBranch(); };
+      if (branchNewBtn) branchNewBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); doCreateBranch(); };
 
 			      resetBackdrop.onclick = closeResetModal;
 			      resetCloseBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); closeResetModal(); };
