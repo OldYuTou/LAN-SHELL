@@ -55,6 +55,55 @@
   <!-- 文本编辑器（CodeMirror 5）：行号、滚动、光标移动等基础能力 -->
   <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.16/lib/codemirror.css">
   <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.16/theme/material-darker.css">
+  <style id="git-branch-style" disabled>
+    /* Git 分支选择弹窗（懒加载，避免初始渲染出现在终端） */
+    #git-branch-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      z-index: 1000;
+    }
+    #git-branch-backdrop.open { display:block; }
+    #git-branch-modal {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: min(92vw, 620px);
+      background: rgba(26, 30, 44, 0.96);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 14px 50px rgba(0,0,0,0.5);
+      display: none;
+      z-index: 1001;
+      color:#fff;
+    }
+    #git-branch-modal.open { display:block; }
+    #git-branch-modal .row { display:flex; align-items:center; gap:10px; margin-bottom: 12px; }
+    #git-branch-modal .title { font-weight:800; font-size:14px; letter-spacing:0.2px; }
+    #git-branch-modal .close {
+      margin-left:auto;
+      background: transparent;
+      border: none;
+      color: rgba(255,255,255,0.85);
+      font-size: 20px;
+      cursor:pointer;
+    }
+    .branch-filter { width:100%; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:rgba(0,0,0,0.18); color:#fff; padding:10px 12px; box-sizing:border-box; font-size:13px; margin-bottom:10px; }
+    .branch-columns { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .branch-list { max-height: 48vh; overflow:auto; border:1px solid rgba(255,255,255,0.10); border-radius:12px; padding:6px; background: rgba(0,0,0,0.08); }
+    .branch-item { padding:10px 12px; border-radius:10px; cursor:pointer; display:flex; align-items:center; gap:8px; font-size:13px; }
+    .branch-item:hover { background: rgba(255,255,255,0.08); }
+    .branch-item.active { background: rgba(45,140,255,0.25); border:1px solid rgba(45,140,255,0.55); }
+    .branch-tag { font-size:11px; opacity:0.8; padding:2px 6px; border-radius:8px; border:1px solid rgba(255,255,255,0.15); }
+    #branch-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:12px; flex-wrap:wrap; }
+    #branch-actions button { border-radius: 12px; padding: 10px 14px; font-size: 13px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.08); color: #fff; cursor: pointer; font-weight: 700; }
+    #branch-actions button.primary { background: rgba(45, 140, 255, 0.92); border-color: rgba(45, 140, 255, 0.65); }
+    #branch-actions button.danger { background: rgba(255, 80, 80, 0.24); border-color: rgba(255, 80, 80, 0.60); color:#ff6b6b; }
+    #branch-status { font-size:12px; opacity:0.8; margin-top:8px; line-height:1.4; }
+  </style>
   <style>
     :root { 
       --bg:#0f1115; 
@@ -4962,6 +5011,8 @@
       if (branchSwitchBtn) branchSwitchBtn.onclick = async (e) => {
         e.preventDefault(); e.stopPropagation();
         try {
+          // 确保懒加载样式启用
+          try { document.getElementById('git-branch-style')?.removeAttribute('disabled'); } catch {}
           const cwd = getTargetCwd();
           const data = await fetchBranches(cwd);
           if (!data?.isRepo) { showToast('⚠️ 不是 Git 仓库'); return; }
@@ -6302,50 +6353,3 @@
 				  </script>
 </body>
 </html>
-    /* Git 分支选择弹窗 */
-    #git-branch-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.55);
-      display: none;
-      z-index: 1000;
-    }
-    #git-branch-backdrop.open { display:block; }
-    #git-branch-modal {
-      position: fixed;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      width: min(92vw, 620px);
-      background: rgba(26, 30, 44, 0.96);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 16px;
-      padding: 14px;
-      box-shadow: 0 14px 50px rgba(0,0,0,0.5);
-      display: none;
-      z-index: 1001;
-      color:#fff;
-    }
-    #git-branch-modal.open { display:block; }
-    #git-branch-modal .row { display:flex; align-items:center; gap:10px; margin-bottom: 12px; }
-    #git-branch-modal .title { font-weight:800; font-size:14px; letter-spacing:0.2px; }
-    #git-branch-modal .close {
-      margin-left:auto;
-      background: transparent;
-      border: none;
-      color: rgba(255,255,255,0.85);
-      font-size: 20px;
-      cursor:pointer;
-    }
-    .branch-filter { width:100%; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:rgba(0,0,0,0.18); color:#fff; padding:10px 12px; box-sizing:border-box; font-size:13px; margin-bottom:10px; }
-    .branch-columns { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-    .branch-list { max-height: 48vh; overflow:auto; border:1px solid rgba(255,255,255,0.10); border-radius:12px; padding:6px; background: rgba(0,0,0,0.08); }
-    .branch-item { padding:10px 12px; border-radius:10px; cursor:pointer; display:flex; align-items:center; gap:8px; font-size:13px; }
-    .branch-item:hover { background: rgba(255,255,255,0.08); }
-    .branch-item.active { background: rgba(45,140,255,0.25); border:1px solid rgba(45,140,255,0.55); }
-    .branch-tag { font-size:11px; opacity:0.8; padding:2px 6px; border-radius:8px; border:1px solid rgba(255,255,255,0.15); }
-    #branch-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:12px; flex-wrap:wrap; }
-    #branch-actions button { border-radius: 12px; padding: 10px 14px; font-size: 13px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.08); color: #fff; cursor: pointer; font-weight: 700; }
-    #branch-actions button.primary { background: rgba(45, 140, 255, 0.92); border-color: rgba(45, 140, 255, 0.65); }
-    #branch-actions button.danger { background: rgba(255, 80, 80, 0.24); border-color: rgba(255, 80, 80, 0.60); color:#ff6b6b; }
-    #branch-status { font-size:12px; opacity:0.8; margin-top:8px; line-height:1.4; }
