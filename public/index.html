@@ -5017,6 +5017,11 @@
         try {
           // 确保懒加载样式启用
           try { document.getElementById('git-branch-style')?.removeAttribute('disabled'); } catch {}
+          // 若 Git 页面未打开，先打开再拉取分支，确保弹窗叠在 Git 管理视图上
+          const gitPage = document.getElementById('git-page');
+          if (gitPage && gitPage.getAttribute('aria-hidden') !== 'false') {
+            openGitPage({ promptInit: false });
+          }
           const cwd = getTargetCwd();
           const data = await fetchBranches(cwd);
           if (!data?.isRepo) { showToast('⚠️ 不是 Git 仓库'); return; }
