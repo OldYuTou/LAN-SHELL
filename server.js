@@ -42,8 +42,8 @@ const ALLOWED_CMDS = (process.env.ALLOWED_CMDS || 'npm,node,yarn,pnpm,ls,bash')
 const HISTORY_MAX_CHARS = Number.parseInt(process.env.HISTORY_MAX_CHARS || '', 10) || 500000;
 
 const app = express();
-// 文本编辑会走 JSON 上传内容，适当放宽上限；实际可编辑大小仍由 /api/file 的限制控制
-app.use(express.json({ limit: '8mb' }));
+// 文本编辑/上传会走 JSON；实际可写入大小由各 API 的限制控制
+app.use(express.json({ limit: '32mb' }));
 
 // 指令集（预设命令）持久化：存到服务端文件，便于多设备共享（NO AUTH）
 const DATA_DIR = path.join(__dirname, 'data');
@@ -243,12 +243,22 @@ app.get('/api/fs', (req, res) => {
 // - 为了避免覆盖外部修改，PUT 支持带 mtimeMs 的乐观锁（不传则直接写入）
 const MAX_TEXT_FILE_BYTES = 2 * 1024 * 1024; // 2MB
 const BINARY_SNIFF_BYTES = 8 * 1024; // 8KB
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10MB
 
 function resolvePathFromQuery(raw) {
   const p = (raw ?? '.').toString();
   const target = path.resolve(ROOT, p);
   if (!withinRoot(target)) return { ok: false, error: 'out of root', target: null, raw: p };
   return { ok: true, target, raw: p };
+}
+
+function validateFileName(name) {
+  const n = String(name || '').trim();
+  if (!n) return { ok: false, error: 'name required', name: null };
+  if (n === '.' || n === '..') return { ok: false, error: 'invalid name', name: null };
+  if (n.includes('/') || n.includes('\\')) return { ok: false, error: 'name must not contain path separators', name: null };
+  if (n.includes('\0')) return { ok: false, error: 'invalid name', name: null };
+  return { ok: true, name: n };
 }
 
 function looksBinary(buf) {
@@ -334,6 +344,57 @@ app.put('/api/file', (req, res) => {
     return res.json({ ok: true, path: r.target, size: st2.size, mtimeMs: st2.mtimeMs });
   } catch (e) {
     return res.status(500).json({ error: e?.message || 'write failed' });
+  }
+});
+
+// 上传文件（NO AUTH）
+// 前端会把文件读成 base64 传入，这里按二进制写入（支持非文本文件）。
+app.post('/api/upload', (req, res) => {
+  const body = req.body || {};
+  const dirRaw = body.dir;
+  const nameRaw = body.name;
+  const dataBase64 = body.dataBase64;
+  const overwrite = Boolean(body.overwrite);
+
+  const dir = resolvePathFromQuery(dirRaw);
+  if (!dir.ok) return res.status(403).json({ error: dir.error });
+
+  const nm = validateFileName(nameRaw);
+  if (!nm.ok) return res.status(400).json({ error: nm.error });
+
+  if (typeof dataBase64 !== 'string' || !dataBase64) return res.status(400).json({ error: 'dataBase64 required' });
+
+  // 兼容 data URL：data:xxx;base64,....
+  const base64 = dataBase64.includes(',') ? dataBase64.split(',').pop() : dataBase64;
+  let buf = null;
+  try {
+    buf = Buffer.from(base64, 'base64');
+  } catch {
+    return res.status(400).json({ error: 'invalid base64' });
+  }
+  if (!buf || !buf.length) return res.status(400).json({ error: 'invalid data' });
+  if (buf.length > MAX_UPLOAD_BYTES) return res.status(413).json({ error: `file too large (>${MAX_UPLOAD_BYTES} bytes)` });
+
+  try {
+    const st = fs.statSync(dir.target);
+    if (!st.isDirectory()) return res.status(400).json({ error: 'dir is not a directory' });
+  } catch (e) {
+    return res.status(400).json({ error: e?.message || 'dir invalid' });
+  }
+
+  const target = path.join(dir.target, nm.name);
+  if (!withinRoot(target)) return res.status(403).json({ error: 'out of root' });
+
+  try {
+    if (fs.existsSync(target) && !overwrite) return res.status(409).json({ error: 'file exists' });
+
+    const tmp = `${target}.${process.pid}.upload.tmp`;
+    fs.writeFileSync(tmp, buf);
+    fs.renameSync(tmp, target);
+    const st = fs.statSync(target);
+    return res.json({ ok: true, path: target, size: st.size, mtimeMs: st.mtimeMs });
+  } catch (e) {
+    return res.status(500).json({ error: e?.message || 'upload failed' });
   }
 });
 

@@ -190,7 +190,104 @@
       align-items:center;
       gap:8px;
     }
-    
+    #sidebar-header .spacer { flex:1; }
+    #sidebar-actions {
+      display:flex;
+      gap:8px;
+      margin-left:auto;
+      align-items:center;
+    }
+    #sidebar-actions button {
+      padding:8px 10px;
+      border-radius:10px;
+      font-size:13px;
+      font-weight:700;
+      background: rgba(26, 30, 44, 0.92);
+      border: 1px solid rgba(0,0,0,0.10);
+      color:#111;
+      cursor:pointer;
+    }
+    #sidebar-actions button:hover { background: rgba(26, 30, 44, 0.84); }
+    #sidebar-actions button.primary {
+      background: rgba(45, 140, 255, 0.92);
+      border-color: rgba(45, 140, 255, 0.55);
+      color:#fff;
+    }
+
+    /* 新建/上传弹窗 */
+    #file-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      z-index: 1000;
+    }
+    #file-modal-backdrop.open { display:block; }
+    #file-modal {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: min(92vw, 520px);
+      background: rgba(26, 30, 44, 0.96);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 14px 50px rgba(0,0,0,0.5);
+      display: none;
+      z-index: 1001;
+      color:#fff;
+    }
+    #file-modal.open { display:block; }
+    .file-modal-row {
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin-bottom: 12px;
+    }
+    .file-modal-title { font-weight:800; font-size:14px; letter-spacing:0.2px; }
+    .file-modal-close {
+      margin-left:auto;
+      background: transparent;
+      border: none;
+      color: rgba(255,255,255,0.85);
+      font-size: 20px;
+      cursor:pointer;
+    }
+    .file-modal-field label { display:block; font-size: 12px; opacity:0.85; margin-bottom: 6px; }
+    .file-modal-field input {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.18);
+      color: #fff;
+      padding: 10px 12px;
+      box-sizing: border-box;
+      font-size: 13px;
+      outline: none;
+    }
+    .file-modal-actions {
+      display:flex;
+      gap:10px;
+      justify-content:flex-end;
+      margin-top:12px;
+      flex-wrap:wrap;
+    }
+    .file-modal-actions button {
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 13px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .file-modal-actions button.primary {
+      background: rgba(45, 140, 255, 0.92);
+      border-color: rgba(45, 140, 255, 0.65);
+    }
+
     /* 文件列表 */
     #list { 
       flex:1; 
@@ -1255,6 +1352,10 @@
       <div id="sidebar-header">
         <span>📁</span>
         <span>文件浏览器</span>
+        <span class="spacer"></span>
+        <div id="sidebar-actions">
+          <button id="newFileBtn" class="primary" title="新建/上传">＋</button>
+        </div>
       </div>
       <div id="list"></div>
     </div>
@@ -1302,7 +1403,7 @@
 		    </div>
 		  </aside>
 
-		  <!-- 长按 PASTE 弹出输入框 -->
+			  <!-- 长按 PASTE 弹出输入框 -->
 		  <div id="paste-modal-backdrop" aria-hidden="true"></div>
 			  <div id="paste-modal" role="dialog" aria-modal="true" aria-hidden="true">
 			    <div class="row">
@@ -1313,6 +1414,28 @@
 			    <div class="actions">
 			      <button id="pasteModalCancelBtn">Cancel</button>
 			      <button id="pasteModalOkBtn" class="primary">OK</button>
+			    </div>
+			  </div>
+
+			  <!-- 新建/上传文件弹窗 -->
+			  <div id="file-modal-backdrop" aria-hidden="true"></div>
+			  <div id="file-modal" role="dialog" aria-modal="true" aria-hidden="true">
+			    <div class="file-modal-row">
+			      <div class="file-modal-title">新建 / 上传文件</div>
+			      <button class="file-modal-close" id="fileModalCloseBtn" title="Close">×</button>
+			    </div>
+			    <div class="file-modal-field">
+			      <label>当前目录</label>
+			      <input id="fileModalDir" spellcheck="false" autocapitalize="off" autocorrect="off" />
+			    </div>
+			    <div class="file-modal-field" style="margin-top:10px;">
+			      <label>新建空白文件名</label>
+			      <input id="newFileNameInput" placeholder="例如：notes.txt" spellcheck="false" autocapitalize="off" autocorrect="off" />
+			    </div>
+			    <input id="uploadFileInput" type="file" style="display:none;" />
+			    <div class="file-modal-actions">
+			      <button id="uploadBtn">上传文件</button>
+			      <button id="createEmptyFileBtn" class="primary">新建空白文件</button>
 			    </div>
 			  </div>
 
@@ -2043,6 +2166,153 @@
       if (base === '/') return `/${name}`;
       return base.replace(/\/$/, '') + '/' + name;
     }
+
+	    // -----------------------
+	    // 文件创建/上传
+	    // -----------------------
+	    function installFileModal() {
+	      const newFileBtn = document.getElementById('newFileBtn');
+	      const backdrop = document.getElementById('file-modal-backdrop');
+	      const modal = document.getElementById('file-modal');
+	      const closeBtn = document.getElementById('fileModalCloseBtn');
+	      const dirInput = document.getElementById('fileModalDir');
+	      const nameInput = document.getElementById('newFileNameInput');
+	      const createBtn = document.getElementById('createEmptyFileBtn');
+	      const uploadBtn = document.getElementById('uploadBtn');
+	      const uploadInput = document.getElementById('uploadFileInput');
+
+	      if (!newFileBtn || !backdrop || !modal) return;
+
+	      function open() {
+	        try {
+	          const cwd = document.getElementById('path')?.value || '.';
+	          dirInput.value = cwd;
+	        } catch {}
+	        backdrop.classList.add('open');
+	        modal.classList.add('open');
+	        modal.setAttribute('aria-hidden', 'false');
+	        backdrop.setAttribute('aria-hidden', 'false');
+	        setTimeout(() => { try { nameInput?.focus?.(); } catch {} }, 0);
+	      }
+
+	      function close() {
+	        backdrop.classList.remove('open');
+	        modal.classList.remove('open');
+	        modal.setAttribute('aria-hidden', 'true');
+	        backdrop.setAttribute('aria-hidden', 'true');
+	      }
+
+	      newFileBtn.onclick = (e) => {
+	        e.preventDefault();
+	        e.stopPropagation();
+	        open();
+	      };
+	      backdrop.onclick = close;
+	      closeBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); close(); };
+
+	      async function refreshDir() {
+	        try {
+	          const p = document.getElementById('path')?.value || '.';
+	          await loadDir(p);
+	        } catch {}
+	      }
+
+	      createBtn.onclick = async (e) => {
+	        e.preventDefault();
+	        e.stopPropagation();
+	        const dir = (dirInput.value || '').trim() || '.';
+	        const name = (nameInput.value || '').trim();
+	        if (!name) {
+	          showToast('⚠️ 请输入文件名');
+	          return;
+	        }
+	        const full = join(dir, name);
+	        try {
+	          const res = await fetch(`/api/file?token=${encodeURIComponent(authToken)}`, {
+	            method: 'PUT',
+	            headers: { 'Content-Type': 'application/json' },
+	            body: JSON.stringify({ path: full, content: '' }),
+	          });
+	          if (!res.ok) {
+	            let msg = `新建失败（${res.status}）`;
+	            try { const j = await res.json(); if (j?.error) msg = `新建失败：${j.error}`; } catch {}
+	            showToast(`❌ ${msg}`);
+	            return;
+	          }
+	          showToast('✅ 已新建文件');
+	          close();
+	          await refreshDir();
+	          openEditor(full);
+	        } catch (err) {
+	          showToast(`❌ 新建失败：${err?.message || err}`);
+	        }
+	      };
+
+	      uploadBtn.onclick = (e) => {
+	        e.preventDefault();
+	        e.stopPropagation();
+	        try { uploadInput.value = ''; } catch {}
+	        uploadInput.click();
+	      };
+
+	      uploadInput.onchange = async () => {
+	        const file = uploadInput.files?.[0];
+	        if (!file) return;
+	        const dir = (dirInput.value || '').trim() || '.';
+	        const name = file.name || 'upload.bin';
+	        try {
+	          const buf = await file.arrayBuffer();
+	          const bytes = new Uint8Array(buf);
+	          // 转 base64（兼容二进制）
+	          let binary = '';
+	          const chunk = 0x8000;
+	          for (let i = 0; i < bytes.length; i += chunk) {
+	            binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+	          }
+	          const b64 = btoa(binary);
+
+	          async function doUpload({ overwrite = false } = {}) {
+	            const res = await fetch(`/api/upload?token=${encodeURIComponent(authToken)}`, {
+	              method: 'POST',
+	              headers: { 'Content-Type': 'application/json' },
+	              body: JSON.stringify({ dir, name, dataBase64: b64, overwrite }),
+	            });
+	            if (res.status === 409) return { ok: false, conflict: true };
+	            if (!res.ok) {
+	              let msg = `上传失败（${res.status}）`;
+	              try { const j = await res.json(); if (j?.error) msg = `上传失败：${j.error}`; } catch {}
+	              showToast(`❌ ${msg}`);
+	              return { ok: false, conflict: false };
+	            }
+	            return { ok: true };
+	          }
+
+	          const r1 = await doUpload({ overwrite: false });
+	          if (!r1.ok && r1.conflict) {
+	            const ok = confirm(`文件已存在：${name}\n\n“确定”=覆盖\n“取消”=不上传`);
+	            if (!ok) return;
+	            const r2 = await doUpload({ overwrite: true });
+	            if (!r2.ok) return;
+	          } else if (!r1.ok) {
+	            return;
+	          }
+
+	          showToast('✅ 上传成功');
+	          close();
+	          await refreshDir();
+	        } catch (err) {
+	          showToast(`❌ 上传失败：${err?.message || err}`);
+	        }
+	      };
+
+	      // ESC 关闭
+	      document.addEventListener('keydown', (e) => {
+	        if (e.key === 'Escape' && modal.classList.contains('open')) {
+	          e.preventDefault();
+	          close();
+	        }
+	      }, true);
+	    }
 
 	    // -----------------------
 	    // 文本编辑器（CodeMirror）
@@ -4707,11 +4977,14 @@
 	        console.log('✅ 单设备Token管理已启动');
 	      }
 
-	      // 初始化指令集页面
-	      initCommandSets();
+      // 初始化指令集页面
+      initCommandSets();
 
-	      // 初始化 Git 页面
-	      initGitPage();
+      // 初始化 Git 页面
+      initGitPage();
+
+		      // 初始化文件新建/上传
+		      installFileModal();
 
 		      initSideActions();
 		      loadDir('.');
