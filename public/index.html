@@ -1667,17 +1667,13 @@
 			      <input id="fileModalDir" spellcheck="false" autocapitalize="off" autocorrect="off" />
 			    </div>
 			    <div class="file-modal-field" style="margin-top:10px;">
-			      <label>新建空白文件名</label>
-			      <input id="newFileNameInput" placeholder="例如：notes.txt" spellcheck="false" autocapitalize="off" autocorrect="off" />
-			    </div>
-			    <div class="file-modal-field" style="margin-top:10px;">
-			      <label>新建文件夹名</label>
-			      <input id="newDirNameInput" placeholder="例如：docs" spellcheck="false" autocapitalize="off" autocorrect="off" />
+			      <label>名称</label>
+			      <input id="newEntryNameInput" placeholder="例如：notes.txt 或 docs" spellcheck="false" autocapitalize="off" autocorrect="off" />
 			    </div>
 			    <input id="uploadFileInput" type="file" style="display:none;" />
 			    <div class="file-modal-actions">
 			      <button id="uploadBtn">上传文件</button>
-			      <button id="createEmptyFileBtn" class="primary">新建空白文件</button>
+			      <button id="createEmptyFileBtn" class="primary">新建文件</button>
 			      <button id="createEmptyDirBtn" class="primary">新建文件夹</button>
 			    </div>
 			  </div>
@@ -2988,8 +2984,7 @@
 	      const modal = document.getElementById('file-modal');
 	      const closeBtn = document.getElementById('fileModalCloseBtn');
 	      const dirInput = document.getElementById('fileModalDir');
-	      const nameInput = document.getElementById('newFileNameInput');
-	      const dirNameInput = document.getElementById('newDirNameInput');
+	      const nameInput = document.getElementById('newEntryNameInput');
 	      const createBtn = document.getElementById('createEmptyFileBtn');
 	      const createDirBtn = document.getElementById('createEmptyDirBtn');
 	      const uploadBtn = document.getElementById('uploadBtn');
@@ -3066,7 +3061,7 @@
 	        e.preventDefault();
 	        e.stopPropagation();
 	        const dir = (dirInput.value || '').trim() || '.';
-	        const name = (dirNameInput.value || '').trim();
+	        const name = (nameInput.value || '').trim();
 	        if (!name) {
 	          showToast('⚠️ 请输入文件夹名');
 	          return;
