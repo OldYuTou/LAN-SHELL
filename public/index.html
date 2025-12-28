@@ -1818,15 +1818,46 @@
 			        <div class="cmdset-title">Git</div>
 			        <div class="cmdset-subtitle" id="gitCwdText">—</div>
 			      </div>
-        <div class="cmdset-actions">
-          <button id="gitRefreshBtn" class="cmdset-icon-btn" title="刷新">⟳</button>
-          <button id="gitBranchSwitchBtn" class="cmdset-icon-btn" title="切换分支">⤴</button>
-          <button id="gitBranchNewBtn" class="cmdset-icon-btn" title="新建分支">＋</button>
-        </div>
-      </div>
+			      <div class="cmdset-actions">
+			        <button id="gitRefreshBtn" class="cmdset-icon-btn" title="刷新">⟳</button>
+			        <button id="gitBranchSwitchBtn" class="cmdset-icon-btn" title="切换分支">⤴</button>
+			        <button id="gitBranchNewBtn" class="cmdset-icon-btn" title="新建分支">＋</button>
+			      </div>
+			    </div>
 			    <div class="cmdset-body">
 			      <div id="gitInfoBox" class="cmdset-empty"></div>
 			      <div id="gitList"></div>
+			    </div>
+			  </div>
+
+			  <!-- Git 分支选择弹窗 -->
+			  <div id="git-branch-backdrop" aria-hidden="true"></div>
+			  <div id="git-branch-modal" role="dialog" aria-modal="true" aria-hidden="true">
+			    <div class="row">
+			      <div class="title">切换分支</div>
+			      <button class="close" id="gitBranchCloseBtn" title="Close">×</button>
+			    </div>
+			    <input id="gitBranchFilter" class="branch-filter" placeholder="搜索分支（本地/远程）" />
+			    <div class="branch-columns">
+			      <div>
+			        <div style="font-size:12px;opacity:0.8;margin-bottom:6px;">本地分支</div>
+			        <div id="gitBranchLocalList" class="branch-list"></div>
+			      </div>
+			      <div>
+			        <div style="font-size:12px;opacity:0.8;margin-bottom:6px;">远程分支</div>
+			        <div id="gitBranchRemoteList" class="branch-list"></div>
+			      </div>
+			    </div>
+			    <div class="extract-field" style="margin-top:10px;">
+			      <label style="display:flex;align-items:center;gap:8px;">
+			        <input type="checkbox" id="gitBranchForce" style="width:16px;height:16px;" />
+			        <span>强制切换（丢弃未提交改动）</span>
+			      </label>
+			    </div>
+			    <div id="branch-status"></div>
+			    <div id="branch-actions">
+			      <button id="gitBranchCancelBtn" class="danger">取消</button>
+			      <button id="gitBranchOkBtn" class="primary">切换</button>
 			    </div>
 			  </div>
 
@@ -4629,39 +4660,95 @@
 			        return fetchJson(`/api/git/branches?cwd=${encodeURIComponent(cwd)}`);
 			      }
 
-			      function pickBranchDialog({ locals = [], remotes = [], current }) {
-			        const all = [...locals, ...remotes.filter(r => !locals.includes(r))];
-			        const hint = all.length ? `可选：\n${all.slice(0,30).join('\n')}\n\n` : '';
-			        const val = prompt(`${hint}输入要切换的分支名称（当前：${current || '-'}）`);
-			        if (!val) return null;
-			        return val.trim();
+			      const branchModal = {
+			        backdrop: null,
+			        modal: null,
+			        filter: null,
+			        localList: null,
+			        remoteList: null,
+			        forceChk: null,
+			        status: null,
+			        okBtn: null,
+			        cancelBtn: null,
+			        closeBtn: null,
+			        data: { locals: [], remotes: [], current: '' },
+			        selected: '',
+			      };
+
+			      function renderBranchList(listEl, branches, current) {
+			        listEl.innerHTML = '';
+			        branches.forEach((name) => {
+			          const div = document.createElement('div');
+			          div.className = 'branch-item';
+			          if (name === current) div.classList.add('active');
+			          div.innerHTML = `<span>${name === current ? '⭐' : '🔀'}</span><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</span>`;
+			          div.onclick = () => {
+			            branchModal.selected = name;
+			            // 高亮
+			            try {
+			              branchModal.localList.querySelectorAll('.branch-item').forEach(el => el.classList.toggle('active', false));
+			              branchModal.remoteList.querySelectorAll('.branch-item').forEach(el => el.classList.toggle('active', false));
+			            } catch {}
+			            div.classList.add('active');
+			          };
+			          listEl.appendChild(div);
+			        });
 			      }
 
-			      async function doSwitchBranch({ force = false } = {}) {
+			      function openBranchModal(data) {
+			        branchModal.data = data || { locals: [], remotes: [], current: '' };
+			        branchModal.selected = data?.current || '';
+			        branchModal.filter.value = '';
+			        renderBranchList(branchModal.localList, data.locals || [], data.current);
+			        renderBranchList(branchModal.remoteList, data.remotes || [], data.current);
+			        branchModal.forceChk.checked = false;
+			        branchModal.status.textContent = `当前分支：${data.current || '-'}`;
+			        branchModal.backdrop.classList.add('open');
+			        branchModal.modal.classList.add('open');
+			      }
+
+			      function closeBranchModal() {
+			        branchModal.backdrop.classList.remove('open');
+			        branchModal.modal.classList.remove('open');
+			      }
+
+			      function filterBranches(keyword) {
+			        const kw = keyword.trim().toLowerCase();
+			        const locals = (branchModal.data.locals || []).filter(n => !kw || n.toLowerCase().includes(kw));
+			        const remotes = (branchModal.data.remotes || []).filter(n => !kw || n.toLowerCase().includes(kw));
+			        renderBranchList(branchModal.localList, locals, branchModal.data.current);
+			        renderBranchList(branchModal.remoteList, remotes, branchModal.data.current);
+			      }
+
+			      async function submitBranchSwitch() {
 			        const cwd = getTargetCwd();
+			        const target = branchModal.selected || branchModal.data.current;
+			        if (!target) { showToast('⚠️ 请选择要切换的分支'); return; }
+			        branchModal.okBtn.disabled = true;
+			        branchModal.cancelBtn.disabled = true;
 			        try {
-			          const br = await fetchBranches(cwd);
-			          if (!br?.isRepo) { showToast('⚠️ 不是 Git 仓库'); return; }
-			          const sel = pickBranchDialog({ locals: br.locals || [], remotes: br.remotes || [], current: br.current });
-			          if (!sel) return;
 			          const res = await fetch('/api/git/checkout', {
 			            method: 'POST',
 			            headers: { 'Content-Type': 'application/json' },
-			            body: JSON.stringify({ cwd, branch: sel, force }),
+			            body: JSON.stringify({ cwd, branch: target, force: branchModal.forceChk.checked }),
 			          });
 			          const data = await res.json().catch(() => ({}));
 			          if (!res.ok) {
-			            if (res.status === 409 && !force) {
-			              const ok = confirm('工作区存在未提交修改，确定强制切换并丢弃这些修改？');
-			              if (ok) return doSwitchBranch({ force: true });
+			            if (res.status === 409) {
+			              branchModal.status.textContent = '工作区有未提交修改：请提交/暂存，或勾选“强制切换”后重试（会丢弃修改）';
+			              branchModal.forceChk.focus();
 			              return;
 			            }
 			            throw new Error(data?.error || `HTTP ${res.status}`);
 			          }
-			          showToast(`✅ 已切换到 ${data?.current || sel}`);
+			          showToast(`✅ 已切换到 ${data?.current || target}`);
+			          closeBranchModal();
 			          refresh({ allowInitPrompt: false }).catch(() => {});
 			        } catch (e) {
-			          showToast(`❌ 切换失败：${e?.message || e}`);
+			          branchModal.status.textContent = `❌ 切换失败：${e?.message || e}`;
+			        } finally {
+			          branchModal.okBtn.disabled = false;
+			          branchModal.cancelBtn.disabled = false;
 			        }
 			      }
 
@@ -4844,10 +4931,39 @@
         e.stopPropagation();
         refresh({ allowInitPrompt: false }).catch(() => {});
       };
+      // 分支选择弹窗绑定
+      branchModal.backdrop = document.getElementById('git-branch-backdrop');
+      branchModal.modal = document.getElementById('git-branch-modal');
+      branchModal.filter = document.getElementById('gitBranchFilter');
+      branchModal.localList = document.getElementById('gitBranchLocalList');
+      branchModal.remoteList = document.getElementById('gitBranchRemoteList');
+      branchModal.forceChk = document.getElementById('gitBranchForce');
+      branchModal.status = document.getElementById('branch-status');
+      branchModal.okBtn = document.getElementById('gitBranchOkBtn');
+      branchModal.cancelBtn = document.getElementById('gitBranchCancelBtn');
+      branchModal.closeBtn = document.getElementById('gitBranchCloseBtn');
+
       const branchSwitchBtn = document.getElementById('gitBranchSwitchBtn');
       const branchNewBtn = document.getElementById('gitBranchNewBtn');
-      if (branchSwitchBtn) branchSwitchBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); doSwitchBranch(); };
+
+      if (branchSwitchBtn) branchSwitchBtn.onclick = async (e) => {
+        e.preventDefault(); e.stopPropagation();
+        try {
+          const cwd = getTargetCwd();
+          const data = await fetchBranches(cwd);
+          if (!data?.isRepo) { showToast('⚠️ 不是 Git 仓库'); return; }
+          openBranchModal(data);
+        } catch (err) {
+          showToast(`❌ 获取分支失败：${err?.message || err}`);
+        }
+      };
       if (branchNewBtn) branchNewBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); doCreateBranch(); };
+
+      if (branchModal.cancelBtn) branchModal.cancelBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); closeBranchModal(); };
+      if (branchModal.closeBtn) branchModal.closeBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); closeBranchModal(); };
+      if (branchModal.backdrop) branchModal.backdrop.onclick = () => closeBranchModal();
+      if (branchModal.okBtn) branchModal.okBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); submitBranchSwitch(); };
+      if (branchModal.filter) branchModal.filter.oninput = (e) => filterBranches(e.target.value || '');
 
 			      resetBackdrop.onclick = closeResetModal;
 			      resetCloseBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); closeResetModal(); };
@@ -6173,3 +6289,50 @@
 				  </script>
 </body>
 </html>
+    /* Git 分支选择弹窗 */
+    #git-branch-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      z-index: 1000;
+    }
+    #git-branch-backdrop.open { display:block; }
+    #git-branch-modal {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: min(92vw, 620px);
+      background: rgba(26, 30, 44, 0.96);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 14px 50px rgba(0,0,0,0.5);
+      display: none;
+      z-index: 1001;
+      color:#fff;
+    }
+    #git-branch-modal.open { display:block; }
+    #git-branch-modal .row { display:flex; align-items:center; gap:10px; margin-bottom: 12px; }
+    #git-branch-modal .title { font-weight:800; font-size:14px; letter-spacing:0.2px; }
+    #git-branch-modal .close {
+      margin-left:auto;
+      background: transparent;
+      border: none;
+      color: rgba(255,255,255,0.85);
+      font-size: 20px;
+      cursor:pointer;
+    }
+    .branch-filter { width:100%; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:rgba(0,0,0,0.18); color:#fff; padding:10px 12px; box-sizing:border-box; font-size:13px; margin-bottom:10px; }
+    .branch-columns { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .branch-list { max-height: 48vh; overflow:auto; border:1px solid rgba(255,255,255,0.10); border-radius:12px; padding:6px; background: rgba(0,0,0,0.08); }
+    .branch-item { padding:10px 12px; border-radius:10px; cursor:pointer; display:flex; align-items:center; gap:8px; font-size:13px; }
+    .branch-item:hover { background: rgba(255,255,255,0.08); }
+    .branch-item.active { background: rgba(45,140,255,0.25); border:1px solid rgba(45,140,255,0.55); }
+    .branch-tag { font-size:11px; opacity:0.8; padding:2px 6px; border-radius:8px; border:1px solid rgba(255,255,255,0.15); }
+    #branch-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:12px; flex-wrap:wrap; }
+    #branch-actions button { border-radius: 12px; padding: 10px 14px; font-size: 13px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.08); color: #fff; cursor: pointer; font-weight: 700; }
+    #branch-actions button.primary { background: rgba(45, 140, 255, 0.92); border-color: rgba(45, 140, 255, 0.65); }
+    #branch-actions button.danger { background: rgba(255, 80, 80, 0.24); border-color: rgba(255, 80, 80, 0.60); color:#ff6b6b; }
+    #branch-status { font-size:12px; opacity:0.8; margin-top:8px; line-height:1.4; }
