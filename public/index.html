@@ -2811,11 +2811,29 @@
 	    function installItemLongPress(el, ctx) {
 	      let timer = null;
 	      const delay = 520;
+	      const MOVE_CANCEL_PX = 12;
+	      let startX = 0;
+	      let startY = 0;
 	      el.addEventListener('touchstart', (e) => {
+	        const t = e.touches?.[0];
+	        if (!t) return;
+	        startX = t.clientX;
+	        startY = t.clientY;
 	        timer = setTimeout(() => {
 	          try { openOpMenu(ctx); } catch {}
 	          try { el.__lanFsLongPressFiredAt = Date.now(); } catch {}
 	        }, delay);
+	      }, { passive: true });
+	      el.addEventListener('touchmove', (e) => {
+	        if (!timer) return;
+	        const t = e.touches?.[0];
+	        if (!t) return;
+	        const dx = Math.abs(t.clientX - startX);
+	        const dy = Math.abs(t.clientY - startY);
+	        if (dx > MOVE_CANCEL_PX || dy > MOVE_CANCEL_PX) {
+	          clearTimeout(timer);
+	          timer = null;
+	        }
 	      }, { passive: true });
 	      el.addEventListener('touchend', () => { if (timer) clearTimeout(timer); timer = null; }, { passive: true });
 	      el.addEventListener('touchcancel', () => { if (timer) clearTimeout(timer); timer = null; }, { passive: true });
