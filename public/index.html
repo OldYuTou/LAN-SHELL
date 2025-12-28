@@ -1991,7 +1991,6 @@
       </div>
       <div id="gitResetDesc" class="desc"></div>
       <div class="actions">
-        <button id="gitResetCancelBtn">取消</button>
         <button id="gitBranchFromCommitBtn">新分支</button>
         <button id="gitRevertBtn">Revert</button>
         <button id="gitResetSoftBtn" class="primary">软回退</button>
@@ -4661,13 +4660,12 @@
 			      const resetBackdrop = document.getElementById('git-reset-backdrop');
 			      const resetModal = document.getElementById('git-reset-modal');
 			      const resetCloseBtn = document.getElementById('gitResetCloseBtn');
-			      const resetCancelBtn = document.getElementById('gitResetCancelBtn');
 			      const revertBtn = document.getElementById('gitRevertBtn');
 			      const resetSoftBtn = document.getElementById('gitResetSoftBtn');
 			      const resetHardBtn = document.getElementById('gitResetHardBtn');
 			      const resetDesc = document.getElementById('gitResetDesc');
 			      if (!page || !backBtn || !refreshBtn || !cwdText || !infoBox || !listEl) return;
-			      if (!resetBackdrop || !resetModal || !resetCloseBtn || !resetCancelBtn || !revertBtn || !resetSoftBtn || !resetHardBtn || !resetDesc) return;
+			      if (!resetBackdrop || !resetModal || !resetCloseBtn || !revertBtn || !resetSoftBtn || !resetHardBtn || !resetDesc) return;
 
 			      const state = {
 			        loading: false,
@@ -5210,7 +5208,6 @@
 
 			      resetBackdrop.onclick = closeResetModal;
 			      resetCloseBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); closeResetModal(); };
-			      resetCancelBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); closeResetModal(); };
 			      revertBtn.onclick = (e) => {
 			        e.preventDefault();
 			        e.stopPropagation();
