@@ -2722,7 +2722,8 @@
 	      const actions = document.getElementById('op-actions');
 	      if (!backdrop || !modal) return;
 
-	      function close() {
+	      function close({ clearClipboard = false } = {}) {
+	        if (clearClipboard) fsClipboard = null;
 	        backdrop.classList.remove('open');
 	        modal.classList.remove('open');
 	      }
@@ -2969,7 +2970,7 @@
 	          }
 	          showToast(mode === 'move' ? '✅ 已移动' : '✅ 已复制');
 	          fsClipboard = null; // 剪切完成后清空
-	          close();
+	          close({ clearClipboard: true });
 	          await loadDir(document.getElementById('path')?.value || '.');
 	        } catch (e) {
 	          showToast(`❌ ${mode === 'move' ? '移动' : '复制'}失败：${e?.message || e}`);
@@ -2986,15 +2987,15 @@
 	      modal.classList.add('open');
 	      renderDir(defaultDest || '.');
 
-	      backdrop.onclick = close;
-	      closeBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); close(); };
-	      cancelBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); close(); };
+	      backdrop.onclick = () => close({ clearClipboard: true });
+	      closeBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); close({ clearClipboard: true }); };
+	      cancelBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); close({ clearClipboard: true }); };
 	      okBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); submit(); };
 
 	      document.addEventListener('keydown', function esc(e) {
 	        if (e.key === 'Escape' && modal.classList.contains('open')) {
 	          e.preventDefault();
-	          close();
+	          close({ clearClipboard: true });
 	          document.removeEventListener('keydown', esc, true);
 	        }
 	      }, true);
