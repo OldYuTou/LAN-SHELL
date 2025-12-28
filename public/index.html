@@ -288,6 +288,110 @@
       border-color: rgba(45, 140, 255, 0.65);
     }
 
+    /* 解压弹窗 + 目录选择 */
+    #extract-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      z-index: 1000;
+    }
+    #extract-modal-backdrop.open { display:block; }
+    #extract-modal {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: min(92vw, 560px);
+      background: rgba(26, 30, 44, 0.96);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 14px 50px rgba(0,0,0,0.5);
+      display: none;
+      z-index: 1001;
+      color:#fff;
+    }
+    #extract-modal.open { display:block; }
+    #extract-modal .row { display:flex; align-items:center; gap:10px; margin-bottom: 12px; }
+    #extract-modal .title { font-weight:800; font-size:14px; letter-spacing:0.2px; }
+    #extract-modal .close {
+      margin-left:auto;
+      background: transparent;
+      border: none;
+      color: rgba(255,255,255,0.85);
+      font-size: 20px;
+      cursor:pointer;
+    }
+    .extract-field { margin-top:10px; }
+    .extract-field label { display:block; font-size: 12px; opacity:0.85; margin-bottom: 6px; }
+    .extract-field input {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.18);
+      color: #fff;
+      padding: 10px 12px;
+      box-sizing: border-box;
+      font-size: 13px;
+      outline: none;
+    }
+    .extract-inline {
+      display:flex;
+      gap:10px;
+      align-items:center;
+    }
+    .extract-inline input { flex:1; min-width:0; }
+    .extract-inline button {
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 13px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 800;
+      white-space:nowrap;
+    }
+    .extract-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:12px; flex-wrap:wrap; }
+    .extract-actions button.primary {
+      background: rgba(45, 140, 255, 0.92);
+      border-color: rgba(45, 140, 255, 0.65);
+    }
+    .extract-actions button.danger {
+      background: rgba(255, 80, 80, 0.24);
+      border-color: rgba(255, 80, 80, 0.60);
+      color:#ff6b6b;
+    }
+
+    #dirpicker {
+      margin-top:12px;
+      border-top:1px solid rgba(255,255,255,0.10);
+      padding-top:12px;
+      display:none;
+    }
+    #dirpicker.open { display:block; }
+    #dirpicker .hint { font-size:12px; opacity:0.8; margin-bottom:8px; }
+    #dirpicker-list {
+      max-height: 42vh;
+      overflow:auto;
+      border:1px solid rgba(255,255,255,0.10);
+      border-radius:12px;
+      padding:8px;
+      background: rgba(0,0,0,0.10);
+    }
+    .dir-item {
+      padding:10px 10px;
+      border-radius:10px;
+      cursor:pointer;
+      display:flex;
+      gap:10px;
+      align-items:center;
+      font-size:13px;
+    }
+    .dir-item:hover { background: rgba(255,255,255,0.07); }
+    #dirpicker-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:10px; }
+
     /* 文件列表 */
     #list { 
       flex:1; 
@@ -1439,6 +1543,49 @@
 			    </div>
 			  </div>
 
+			  <!-- 解压弹窗（含目录选择器） -->
+			  <div id="extract-modal-backdrop" aria-hidden="true"></div>
+			  <div id="extract-modal" role="dialog" aria-modal="true" aria-hidden="true">
+			    <div class="row">
+			      <div class="title">解压</div>
+			      <button class="close" id="extractModalCloseBtn" title="Close">×</button>
+			    </div>
+			    <div class="extract-field">
+			      <label>压缩包路径</label>
+			      <input id="extractArchivePath" spellcheck="false" autocapitalize="off" autocorrect="off" />
+			    </div>
+			    <div class="extract-field">
+			      <label>解压到目录</label>
+			      <div class="extract-inline">
+			        <input id="extractDestPath" spellcheck="false" autocapitalize="off" autocorrect="off" />
+			        <button id="pickDestBtn" title="选择目录">选择</button>
+			      </div>
+			    </div>
+			    <div class="extract-field" style="margin-top:10px;">
+			      <label style="display:flex;align-items:center;gap:8px;">
+			        <input type="checkbox" id="extractOverwrite" style="width:16px;height:16px;" />
+			        <span>允许覆盖同名文件</span>
+			      </label>
+			    </div>
+			    <div class="extract-actions">
+			      <button id="extractCancelBtn" class="danger">取消</button>
+			      <button id="extractOkBtn" class="primary">开始解压</button>
+			    </div>
+
+			    <div id="dirpicker">
+			      <div class="hint">选择解压目录（点击文件夹进入；点击 ⬆️ 返回上级）</div>
+			      <div class="extract-field" style="margin-top:0;">
+			        <label>当前浏览目录</label>
+			        <input id="dirpickerPath" spellcheck="false" autocapitalize="off" autocorrect="off" />
+			      </div>
+			      <div id="dirpicker-list"></div>
+			      <div id="dirpicker-actions">
+			        <button id="dirpickerCancelBtn">取消选择</button>
+			        <button id="dirpickerOkBtn" class="primary">使用该目录</button>
+			      </div>
+			    </div>
+			  </div>
+
 			  <!-- 组合键弹窗 -->
 			  <div id="combo-modal-backdrop" aria-hidden="true"></div>
 			  <div id="combo-modal" role="dialog" aria-modal="true" aria-hidden="true">
@@ -2150,13 +2297,25 @@
             if (confirmed) createTerminal(data.cwd, `./${it.name}`);
           } else {
             // 桌面端：双击打开更符合习惯；移动端没有双击概念，因此单击也打开
-            openEditor(join(data.cwd, it.name));
+            const full = join(data.cwd, it.name);
+            if (isArchiveFileName(it.name)) {
+              try { window.__lanShellOpenExtractModal?.({ archivePath: full, defaultDest: data.cwd }); } catch {}
+            } else {
+              openEditor(full);
+            }
           }
         };
 
         // 桌面端双击打开文件编辑器（不影响目录单击进入）
         div.ondblclick = () => {
-          if (!it.isDir && !it.isExe) openEditor(join(data.cwd, it.name));
+          if (!it.isDir && !it.isExe) {
+            const full = join(data.cwd, it.name);
+            if (isArchiveFileName(it.name)) {
+              try { window.__lanShellOpenExtractModal?.({ archivePath: full, defaultDest: data.cwd }); } catch {}
+            } else {
+              openEditor(full);
+            }
+          }
         };
         list.appendChild(div);
       });
@@ -2166,6 +2325,181 @@
       if (base === '/') return `/${name}`;
       return base.replace(/\/$/, '') + '/' + name;
     }
+
+	    function isArchiveFileName(name) {
+	      const n = String(name || '').toLowerCase();
+	      return (
+	        n.endsWith('.zip') ||
+	        n.endsWith('.tar') ||
+	        n.endsWith('.tar.gz') ||
+	        n.endsWith('.tgz') ||
+	        n.endsWith('.tar.bz2') ||
+	        n.endsWith('.tbz2') ||
+	        n.endsWith('.tar.xz') ||
+	        n.endsWith('.txz')
+	      );
+	    }
+
+	    function dirname(p) {
+	      try {
+	        const s = String(p || '');
+	        const i = s.lastIndexOf('/');
+	        if (i <= 0) return '/';
+	        return s.slice(0, i) || '/';
+	      } catch {
+	        return '.';
+	      }
+	    }
+
+	    // -----------------------
+	    // 解压（归档）
+	    // -----------------------
+	    function installExtractModal() {
+	      const backdrop = document.getElementById('extract-modal-backdrop');
+	      const modal = document.getElementById('extract-modal');
+	      const closeBtn = document.getElementById('extractModalCloseBtn');
+	      const cancelBtn = document.getElementById('extractCancelBtn');
+	      const okBtn = document.getElementById('extractOkBtn');
+	      const archiveInput = document.getElementById('extractArchivePath');
+	      const destInput = document.getElementById('extractDestPath');
+	      const overwriteInput = document.getElementById('extractOverwrite');
+	      const pickBtn = document.getElementById('pickDestBtn');
+
+	      const picker = document.getElementById('dirpicker');
+	      const pickerPath = document.getElementById('dirpickerPath');
+	      const pickerList = document.getElementById('dirpicker-list');
+	      const pickerCancel = document.getElementById('dirpickerCancelBtn');
+	      const pickerOk = document.getElementById('dirpickerOkBtn');
+
+	      if (!backdrop || !modal) return;
+
+	      let currentPick = '.';
+
+	      async function renderPickerDir(p) {
+	        const res = await fetch(`/api/fs?path=${encodeURIComponent(p)}&token=${encodeURIComponent(authToken)}`);
+	        if (!res.ok) {
+	          showToast('❌ 无法读取目录');
+	          return;
+	        }
+	        const data = await res.json();
+	        const cwd = data.cwd;
+	        currentPick = cwd;
+	        pickerPath.value = cwd;
+	        pickerList.innerHTML = '';
+
+	        if (data.cwd !== data.root) {
+	          const up = document.createElement('div');
+	          up.className = 'dir-item';
+	          up.textContent = '⬆️ ..';
+	          up.onclick = () => {
+	            const parent = cwd.split('/').slice(0, -1).join('/') || '/';
+	            renderPickerDir(parent);
+	          };
+	          pickerList.appendChild(up);
+	        }
+
+	        (data.items || []).forEach((it) => {
+	          if (!it?.isDir) return;
+	          const row = document.createElement('div');
+	          row.className = 'dir-item';
+	          row.innerHTML = `<span>📁</span><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${it.name}</span>`;
+	          row.onclick = () => renderPickerDir(join(cwd, it.name));
+	          pickerList.appendChild(row);
+	        });
+	      }
+
+	      function openPicker(initial) {
+	        picker.classList.add('open');
+	        currentPick = initial || '.';
+	        pickerPath.value = currentPick;
+	        renderPickerDir(currentPick).catch(() => {});
+	      }
+
+	      function closePicker() {
+	        picker.classList.remove('open');
+	      }
+
+	      function open({ archivePath, defaultDest } = {}) {
+	        archiveInput.value = archivePath || '';
+	        destInput.value = defaultDest || dirname(archivePath || '') || '.';
+	        overwriteInput.checked = false;
+	        backdrop.classList.add('open');
+	        modal.classList.add('open');
+	        modal.setAttribute('aria-hidden', 'false');
+	        backdrop.setAttribute('aria-hidden', 'false');
+	        closePicker();
+	      }
+
+	      function close() {
+	        closePicker();
+	        backdrop.classList.remove('open');
+	        modal.classList.remove('open');
+	        modal.setAttribute('aria-hidden', 'true');
+	        backdrop.setAttribute('aria-hidden', 'true');
+	      }
+
+	      async function doExtract() {
+	        const archive = (archiveInput.value || '').trim();
+	        const dest = (destInput.value || '').trim();
+	        if (!archive) { showToast('⚠️ 缺少压缩包路径'); return; }
+	        if (!dest) { showToast('⚠️ 请选择解压目录'); return; }
+
+	        okBtn.disabled = true;
+	        cancelBtn.disabled = true;
+	        pickBtn.disabled = true;
+	        showToast('⏳ 开始解压...');
+	        try {
+	          const res = await fetch(`/api/archive/extract?token=${encodeURIComponent(authToken)}`, {
+	            method: 'POST',
+	            headers: { 'Content-Type': 'application/json' },
+	            body: JSON.stringify({ path: archive, dest, overwrite: Boolean(overwriteInput.checked) }),
+	          });
+	          if (!res.ok) {
+	            let msg = `解压失败（${res.status}）`;
+	            try { const j = await res.json(); if (j?.error) msg = `解压失败：${j.error}`; } catch {}
+	            showToast(`❌ ${msg}`);
+	            return;
+	          }
+	          showToast('✅ 解压完成');
+	          close();
+	          try { await loadDir(document.getElementById('path')?.value || '.'); } catch {}
+	        } catch (e) {
+	          showToast(`❌ 解压失败：${e?.message || e}`);
+	        } finally {
+	          okBtn.disabled = false;
+	          cancelBtn.disabled = false;
+	          pickBtn.disabled = false;
+	        }
+	      }
+
+	      backdrop.onclick = close;
+	      closeBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); close(); };
+	      cancelBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); close(); };
+	      okBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); doExtract(); };
+	      pickBtn.onclick = (e) => {
+	        e.preventDefault();
+	        e.stopPropagation();
+	        const init = (destInput.value || '').trim() || '.';
+	        openPicker(init);
+	      };
+
+	      pickerCancel.onclick = (e) => { e.preventDefault(); e.stopPropagation(); closePicker(); };
+	      pickerOk.onclick = (e) => {
+	        e.preventDefault();
+	        e.stopPropagation();
+	        destInput.value = currentPick;
+	        closePicker();
+	      };
+
+	      document.addEventListener('keydown', (e) => {
+	        if (e.key === 'Escape' && modal.classList.contains('open')) {
+	          e.preventDefault();
+	          close();
+	        }
+	      }, true);
+
+	      window.__lanShellOpenExtractModal = open;
+	    }
 
 	    // -----------------------
 	    // 文件创建/上传
@@ -4981,6 +5315,8 @@
 
 		      // 初始化文件新建/上传
 		      installFileModal();
+		      // 初始化解压弹窗
+		      installExtractModal();
 
 		      initSideActions();
 		      loadDir('.');

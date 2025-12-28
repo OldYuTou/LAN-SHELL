@@ -212,6 +212,64 @@ function execFileAsync(file, args, options = {}) {
   });
 }
 
+function detectArchiveType(filePath) {
+  const p = String(filePath || '').toLowerCase();
+  if (p.endsWith('.zip')) return 'zip';
+  if (p.endsWith('.tar')) return 'tar';
+  if (p.endsWith('.tar.gz') || p.endsWith('.tgz')) return 'targz';
+  if (p.endsWith('.tar.bz2') || p.endsWith('.tbz2')) return 'tarbz2';
+  if (p.endsWith('.tar.xz') || p.endsWith('.txz')) return 'tarxz';
+  return null;
+}
+
+function normalizeEntryPath(entry) {
+  const raw = String(entry || '').replace(/\0/g, '');
+  // 统一分隔符，去掉前导 ./，避免平台差异
+  let p = raw.replace(/\\/g, '/');
+  while (p.startsWith('./')) p = p.slice(2);
+  return p;
+}
+
+function isSafeArchiveEntry(entry) {
+  const p = normalizeEntryPath(entry);
+  if (!p) return false;
+  // 绝对路径 / Windows 盘符
+  if (p.startsWith('/')) return false;
+  if (/^[a-zA-Z]:\//.test(p)) return false;
+  // 目录遍历：任意 path segment 为 ..
+  const segs = p.split('/').filter(Boolean);
+  if (segs.some((s) => s === '..')) return false;
+  return true;
+}
+
+async function listArchiveEntries(filePath, type) {
+  if (type === 'zip') {
+    const { stdout } = await execFileAsync('unzip', ['-Z1', filePath]);
+    return String(stdout || '')
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  // tar 系列：tar -tf 会自动识别压缩？GNU tar 对 .tar.gz 需 -z；这里显式指定更稳
+  if (type === 'tar') {
+    const { stdout } = await execFileAsync('tar', ['-tf', filePath]);
+    return String(stdout || '').split('\n').map((s) => s.trim()).filter(Boolean);
+  }
+  if (type === 'targz') {
+    const { stdout } = await execFileAsync('tar', ['-tzf', filePath]);
+    return String(stdout || '').split('\n').map((s) => s.trim()).filter(Boolean);
+  }
+  if (type === 'tarbz2') {
+    const { stdout } = await execFileAsync('tar', ['-tjf', filePath]);
+    return String(stdout || '').split('\n').map((s) => s.trim()).filter(Boolean);
+  }
+  if (type === 'tarxz') {
+    const { stdout } = await execFileAsync('tar', ['-tJf', filePath]);
+    return String(stdout || '').split('\n').map((s) => s.trim()).filter(Boolean);
+  }
+  return [];
+}
+
 // List directory contents (NO AUTH)
 app.get('/api/fs', (req, res) => {
   const rel = req.query.path || '.';
@@ -497,6 +555,78 @@ app.post('/api/upload-raw', async (req, res) => {
     unlinkQuiet(tmp);
     return res.status(500).json({ error: e?.message || 'upload failed' });
   }
+});
+
+// 解压归档（NO AUTH）
+// - 支持 zip / tar / tar.gz(tgz) / tar.bz2(tbz2) / tar.xz(txz)
+// - 先列目录做 ZipSlip/路径穿越检查，再执行解压
+app.post('/api/archive/extract', async (req, res) => {
+  const body = req.body || {};
+  const archiveRaw = body.path;
+  const destRaw = body.dest;
+  const overwrite = Boolean(body.overwrite);
+
+  const ar = resolvePathFromQuery(archiveRaw);
+  if (!ar.ok) return res.status(403).json({ error: ar.error });
+
+  const dest = resolvePathFromQuery(destRaw);
+  if (!dest.ok) return res.status(403).json({ error: dest.error });
+
+  const type = detectArchiveType(ar.target);
+  if (!type) return res.status(415).json({ error: 'unsupported archive type' });
+
+  try {
+    const st = fs.statSync(ar.target);
+    if (!st.isFile()) return res.status(400).json({ error: 'not a file' });
+  } catch (e) {
+    return res.status(400).json({ error: e?.message || 'archive invalid' });
+  }
+
+  try {
+    if (fs.existsSync(dest.target)) {
+      const st = fs.statSync(dest.target);
+      if (!st.isDirectory()) return res.status(400).json({ error: 'dest is not a directory' });
+    } else {
+      fs.mkdirSync(dest.target, { recursive: true });
+    }
+  } catch (e) {
+    return res.status(400).json({ error: e?.message || 'dest invalid' });
+  }
+
+  // 安全检查：列出条目，拒绝危险路径
+  let entries = [];
+  try {
+    entries = await listArchiveEntries(ar.target, type);
+  } catch (e) {
+    return res.status(400).json({ error: `cannot inspect archive safely: ${e?.message || e}` });
+  }
+  if (!Array.isArray(entries) || !entries.length) return res.status(400).json({ error: 'empty archive' });
+  if (entries.length > 20000) return res.status(413).json({ error: 'too many entries' });
+
+  const bad = entries.find((x) => !isSafeArchiveEntry(x));
+  if (bad) return res.status(400).json({ error: `unsafe entry path: ${bad}` });
+
+  try {
+    if (type === 'zip') {
+      const args = overwrite ? ['-o', ar.target, '-d', dest.target] : ['-n', ar.target, '-d', dest.target];
+      await execFileAsync('unzip', args, { encoding: 'utf8' });
+    } else {
+      // tar：安全参数，避免写入权限/owner
+      const common = ['--no-same-owner', '--no-same-permissions', '-C', dest.target];
+      const ow = overwrite ? ['--overwrite'] : ['--keep-old-files'];
+      const base = ['-x', ...ow];
+      if (type === 'tar') await execFileAsync('tar', [...base, '-f', ar.target, ...common]);
+      else if (type === 'targz') await execFileAsync('tar', [...base, '-z', '-f', ar.target, ...common]);
+      else if (type === 'tarbz2') await execFileAsync('tar', [...base, '-j', '-f', ar.target, ...common]);
+      else if (type === 'tarxz') await execFileAsync('tar', [...base, '-J', '-f', ar.target, ...common]);
+    }
+  } catch (e) {
+    // 常见：系统缺少 unzip 或 tar
+    const msg = e?.message || 'extract failed';
+    return res.status(500).json({ error: msg });
+  }
+
+  return res.json({ ok: true, type, archive: ar.target, dest: dest.target, entries: entries.length });
 });
 
 // 指令集：读取/保存（NO AUTH）
