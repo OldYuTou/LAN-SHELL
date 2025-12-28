@@ -2439,11 +2439,6 @@
       const list = document.getElementById('list');
       list.innerHTML = '';
 
-      // 长按空白处：显示“粘贴到当前目录”等操作
-      try {
-        installListLongPress(list, { cwd: data.cwd, root: data.root });
-      } catch {}
-
       // add parent shortcut if not root
       if (data.cwd !== data.root) {
         const parent = document.createElement('div');
@@ -2832,28 +2827,6 @@
 	      });
 	      el.addEventListener('mouseup', () => { if (timer) clearTimeout(timer); timer = null; });
 	      el.addEventListener('mouseleave', () => { if (timer) clearTimeout(timer); timer = null; });
-	    }
-
-	    function installListLongPress(el, { cwd }) {
-	      if (!el) return;
-	      let timer = null;
-	      const delay = 520;
-	      el.addEventListener('touchstart', () => {
-	        timer = setTimeout(() => {
-	          if (!fsClipboard) {
-	            showToast('剪贴板为空（先复制/剪切一个文件）');
-	            return;
-	          }
-	          openXferModal({
-	            mode: fsClipboard.mode,
-	            src: fsClipboard.src,
-	            defaultDest: cwd,
-	            defaultName: fsClipboard.name,
-	          });
-	        }, delay);
-	      }, { passive: true });
-	      el.addEventListener('touchend', () => { if (timer) clearTimeout(timer); timer = null; }, { passive: true });
-	      el.addEventListener('touchcancel', () => { if (timer) clearTimeout(timer); timer = null; }, { passive: true });
 	    }
 
 	    async function deleteEntry(pathStr) {
