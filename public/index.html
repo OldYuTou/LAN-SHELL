@@ -4757,22 +4757,26 @@
 			        });
 			      }
 
-			      function openBranchModal(data) {
-			        branchModal.data = data || { locals: [], remotes: [], current: '' };
-			        branchModal.selected = data?.current || '';
-			        branchModal.filter.value = '';
-			        renderBranchList(branchModal.localList, data.locals || [], data.current);
-			        renderBranchList(branchModal.remoteList, data.remotes || [], data.current);
-			        branchModal.forceChk.checked = false;
-			        branchModal.status.textContent = `当前分支：${data.current || '-'}`;
-			        branchModal.backdrop.classList.add('open');
-			        branchModal.modal.classList.add('open');
-			      }
+      function openBranchModal(data) {
+        branchModal.data = data || { locals: [], remotes: [], current: '' };
+        branchModal.selected = data?.current || '';
+        branchModal.filter.value = '';
+        renderBranchList(branchModal.localList, data.locals || [], data.current);
+        renderBranchList(branchModal.remoteList, data.remotes || [], data.current);
+        branchModal.forceChk.checked = false;
+        branchModal.status.textContent = `当前分支：${data.current || '-'}`;
+        branchModal.backdrop.style.display = 'block';
+        branchModal.modal.style.display = 'block';
+        branchModal.backdrop.classList.add('open');
+        branchModal.modal.classList.add('open');
+      }
 
-			      function closeBranchModal() {
-			        branchModal.backdrop.classList.remove('open');
-			        branchModal.modal.classList.remove('open');
-			      }
+      function closeBranchModal() {
+        branchModal.backdrop.classList.remove('open');
+        branchModal.modal.classList.remove('open');
+        branchModal.backdrop.style.display = 'none';
+        branchModal.modal.style.display = 'none';
+      }
 
 			      function filterBranches(keyword) {
 			        const kw = keyword.trim().toLowerCase();
