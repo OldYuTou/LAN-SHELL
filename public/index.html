@@ -6191,24 +6191,36 @@
 			      });
 			    }
 
-				    function removeTerminal(id) {
-		      const idx = sessions.findIndex(s => s.id === id);
-		      if (idx === -1) return;
-		      const s = sessions[idx];
-		      if (s.ws) { s.suppressClose = true; s.ws.close(); }
-		      s.inputDisposable?.dispose();
-		      s.resizeListener?.dispose();
-		      s.resizeObserver?.disconnect();
-		      try { if (s._termFlushTimer) clearTimeout(s._termFlushTimer); } catch {}
-	      s.term.dispose();
-	      s.pane.remove();
-	      s.tab.remove();
-	      sessions.splice(idx,1);
-		      if (activeId === id) {
-		        if (sessions.length) setActive(sessions[0].id);
-		        else activeId = null;
-		      }
-		    }
+	    function removeTerminal(id) {
+	      const idx = sessions.findIndex(s => s.id === id);
+	      if (idx === -1) return;
+	      const s = sessions[idx];
+	      // 先标记，避免 ws 关闭时触发自动重连逻辑
+	      try {
+	        if (s.ws) {
+	          s.suppressClose = true;
+	          s.ws.close();
+	        }
+	      } catch (e) {
+	        console.warn('关闭终端 WS 失败', e);
+	      }
+
+	      try { s.inputDisposable?.dispose(); } catch (e) { console.warn('inputDisposable dispose 失败', e); }
+	      try { s.resizeListener?.dispose(); } catch (e) { console.warn('resizeListener dispose 失败', e); }
+	      try { s.resizeObserver?.disconnect(); } catch (e) { console.warn('resizeObserver disconnect 失败', e); }
+	      try { if (s._termFlushTimer) clearTimeout(s._termFlushTimer); } catch {}
+
+	      // 防御性释放：即便某一步抛错也要继续移除标签与面板，避免出现“点一次空白、点两次才关闭”
+	      try { s.term?.dispose?.(); } catch (e) { console.warn('xterm dispose 失败', e); }
+	      try { s.pane?.remove?.(); } catch (e) { console.warn('pane remove 失败', e); }
+	      try { s.tab?.remove?.(); } catch (e) { console.warn('tab remove 失败', e); }
+
+	      sessions.splice(idx, 1);
+	      if (activeId === id) {
+	        if (sessions.length) setActive(sessions[0].id);
+	        else activeId = null;
+	      }
+	    }
 
 	    // Close terminal: delete the unique session id so it won't be restored.
 		    function closeTerminal(id) {
