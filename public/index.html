@@ -788,50 +788,50 @@
 		      height:0; /* 避免部分移动端/Safari 下 % 高度在 flex 容器里计算不稳定 */
 		      overflow:hidden;
 		    }
-	    .editor-pane .CodeMirror {
-	      height:100%;
-	      font-size:13px;
-	      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-	    }
-	    /* VS Code Dark+ 风格配色（覆盖 CodeMirror 默认主题） */
-	    .editor-pane .CodeMirror.cm-s-material-darker {
-	      background:#1e1e1e;
-	      color:#d4d4d4;
-	    }
-	    .editor-pane .CodeMirror.cm-s-material-darker .CodeMirror-gutters {
-	      background:#1e1e1e;
-	      border-right:1px solid #2d2d2d;
-	      color:#858585;
-	    }
-	    .editor-pane .CodeMirror.cm-s-material-darker .CodeMirror-linenumber { color:#858585; }
-	    .editor-pane .CodeMirror.cm-s-material-darker .CodeMirror-cursor { border-left:2px solid #aeafad; }
-	    .editor-pane .CodeMirror.cm-s-material-darker .CodeMirror-selected { background:#264f78; }
-	    .editor-pane .CodeMirror.cm-s-material-darker .CodeMirror-line::selection,
-	    .editor-pane .CodeMirror.cm-s-material-darker .CodeMirror-line > span::selection {
-	      background:#264f78;
-	    }
-	    /* 语法高亮映射 VS Code Dark+ 颜色 */
-	    .editor-pane .CodeMirror.cm-s-material-darker .cm-comment { color:#6a9955; font-style:italic; }
-	    .editor-pane .CodeMirror.cm-s-material-darker .cm-string,
-	    .editor-pane .CodeMirror.cm-s-material-darker .cm-string-2 { color:#ce9178; }
-	    .editor-pane .CodeMirror.cm-s-material-darker .cm-number { color:#b5cea8; }
-	    .editor-pane .CodeMirror.cm-s-material-darker .cm-keyword { color:#c586c0; }
-	    .editor-pane .CodeMirror.cm-s-material-darker .cm-atom { color:#569cd6; }
-	    .editor-pane .CodeMirror.cm-s-material-darker .cm-def { color:#4fc1ff; }
-	    .editor-pane .CodeMirror.cm-s-material-darker .cm-variable { color:#d4d4d4; }
-	    .editor-pane .CodeMirror.cm-s-material-darker .cm-variable-2 { color:#9cdcfe; }
-	    .editor-pane .CodeMirror.cm-s-material-darker .cm-variable-3 { color:#4ec9b0; }
-	    .editor-pane .CodeMirror.cm-s-material-darker .cm-property { color:#9cdcfe; }
-	    .editor-pane .CodeMirror.cm-s-material-darker .cm-operator { color:#d4d4d4; }
-	    .editor-pane .CodeMirror.cm-s-material-darker .cm-qualifier,
-	    .editor-pane .CodeMirror.cm-s-material-darker .cm-builtin { color:#dcdcaa; }
-	    .editor-pane .CodeMirror.cm-s-material-darker .cm-meta { color:#c8c8c8; }
-	    .editor-pane .CodeMirror.cm-s-material-darker .cm-tag { color:#569cd6; }
-	    .editor-pane .CodeMirror.cm-s-material-darker .cm-attribute { color:#9cdcfe; }
-	    .editor-pane .CodeMirror.cm-s-material-darker .cm-error { background:transparent; color:#f44747; }
-	    .editor-pane .CodeMirror.cm-s-material-darker .cm-matchhighlight { background:rgba(255,255,255,0.08); }
-	    .editor-pane .CodeMirror.cm-s-material-darker .CodeMirror-matchingbracket { color:#ffcc00; font-weight:700; }
-	    .editor-pane .CodeMirror.cm-s-material-darker .CodeMirror-nonmatchingbracket { color:#f44747; font-weight:700; }
+    .editor-pane .CodeMirror {
+      height:100%;
+      font-size:13px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    /* VS Code Dark+ 风格配色（自定义主题 vsc-dark-plus） */
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus {
+      background:#1e1e1e;
+      color:#d4d4d4;
+    }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .CodeMirror-gutters {
+      background:#1e1e1e;
+      border-right:1px solid #2d2d2d;
+      color:#858585;
+    }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .CodeMirror-linenumber { color:#858585; }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .CodeMirror-cursor { border-left:2px solid #aeafad; }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .CodeMirror-selected { background:#264f78; }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .CodeMirror-line::selection,
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .CodeMirror-line > span::selection {
+      background:#264f78;
+    }
+    /* 语法高亮映射 VS Code Dark+ 颜色 */
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .cm-comment { color:#6a9955; font-style:italic; }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .cm-string,
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .cm-string-2 { color:#ce9178; }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .cm-number { color:#b5cea8; }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .cm-keyword { color:#c586c0; }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .cm-atom { color:#569cd6; }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .cm-def { color:#4fc1ff; }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .cm-variable { color:#d4d4d4; }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .cm-variable-2 { color:#9cdcfe; }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .cm-variable-3 { color:#4ec9b0; }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .cm-property { color:#9cdcfe; }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .cm-operator { color:#d4d4d4; }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .cm-qualifier,
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .cm-builtin { color:#dcdcaa; }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .cm-meta { color:#c8c8c8; }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .cm-tag { color:#569cd6; }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .cm-attribute { color:#9cdcfe; }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .cm-error { background:transparent; color:#f44747; }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .cm-matchhighlight { background:rgba(255,255,255,0.08); }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .CodeMirror-matchingbracket { color:#ffcc00; font-weight:700; }
+    .editor-pane .CodeMirror.cm-s-vsc-dark-plus .CodeMirror-nonmatchingbracket { color:#f44747; font-weight:700; }
 		    /* 触屏设备上底部有 #cursor-pad：给编辑器滚动区留出“安全底部”，避免最后几行被触控板视觉/交互遮挡 */
 		    @media (pointer: coarse) {
 		      .editor-pane .CodeMirror-scroll {
@@ -3585,15 +3585,15 @@
 	      pane.appendChild(body);
 	      document.getElementById('term-area').appendChild(pane);
 
-	      const cm = CodeMirror(body, {
-	        value: '',
-	        lineNumbers: true,
-	        theme: 'material-darker',
-	        indentUnit: 2,
-	        tabSize: 2,
-	        lineWrapping: false,
-	        viewportMargin: 20,
-	      });
+      const cm = CodeMirror(body, {
+        value: '',
+        lineNumbers: true,
+        theme: 'vsc-dark-plus',
+        indentUnit: 2,
+        tabSize: 2,
+        lineWrapping: false,
+        viewportMargin: 20,
+      });
 	      try { cm.setSize('100%', '100%'); } catch {}
 
 	      const session = {
