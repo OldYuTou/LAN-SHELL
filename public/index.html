@@ -2083,8 +2083,17 @@
 
 			  <script src="https://unpkg.com/xterm/lib/xterm.js"></script>
 			  <!-- 可选：WebGL 渲染加速（加载失败时自动降级） -->
-			  <script src="https://unpkg.com/xterm-addon-webgl/lib/xterm-addon-webgl.js"></script>
-			  <script src="https://unpkg.com/codemirror@5.65.16/lib/codemirror.js"></script>
+  <script src="https://unpkg.com/xterm-addon-webgl/lib/xterm-addon-webgl.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.16/lib/codemirror.js"></script>
+  <!-- 常用语言模式：确保语法高亮可用 -->
+  <script src="https://unpkg.com/codemirror@5.65.16/mode/javascript/javascript.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.16/mode/typescript/typescript.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.16/mode/xml/xml.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.16/mode/css/css.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.16/mode/htmlmixed/htmlmixed.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.16/mode/markdown/markdown.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.16/mode/shell/shell.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.16/mode/python/python.js"></script>
 			  <script>
     // PWA全屏和隐藏地址栏功能
     function hideAddressBar() {
@@ -3407,13 +3416,52 @@
 	      }
 	    }
 
-	    function findEditorByPath(filePath) {
-	      return sessions.find(s => s?.type === 'editor' && s.filePath === filePath);
-	    }
+    function findEditorByPath(filePath) {
+      return sessions.find(s => s?.type === 'editor' && s.filePath === filePath);
+    }
 
-	    function updateEditorTabTitle(s) {
-	      if (!s?.tab) return;
-	      const title = s.displayName || basename(s.filePath);
+    // 根据扩展名推断 CodeMirror mode
+    function guessEditorMode(filePath) {
+      const ext = (filePath || '').toLowerCase().split('.').pop();
+      switch (ext) {
+        case 'js':
+        case 'cjs':
+        case 'mjs':
+          return { name: 'javascript', typescript: false };
+        case 'ts':
+        case 'tsx':
+          return { name: 'javascript', typescript: true };
+        case 'json':
+          return { name: 'application/json' };
+        case 'html':
+        case 'htm':
+          return 'htmlmixed';
+        case 'css':
+          return 'css';
+        case 'md':
+        case 'markdown':
+          return 'markdown';
+        case 'sh':
+        case 'bash':
+          return 'shell';
+        case 'py':
+          return 'python';
+        default:
+          return null; // 默认纯文本
+      }
+    }
+
+    function applyEditorMode(cm, filePath) {
+      if (!cm) return;
+      const mode = guessEditorMode(filePath);
+      if (mode) {
+        try { cm.setOption('mode', mode); } catch (e) { console.warn('设置编辑器模式失败', e); }
+      }
+    }
+
+    function updateEditorTabTitle(s) {
+      if (!s?.tab) return;
+      const title = s.displayName || basename(s.filePath);
 	      // tab 的结构是：文本节点 + close span；这里直接改第一个 child 的 textContent 更稳定
 	      try {
 	        const textNode = s.tab.childNodes?.[0];
@@ -3426,23 +3474,24 @@
 
 	    async function loadEditorFile(s) {
 	      if (!s?.filePath) return false;
-	      try {
-	        const res = await fetch(`/api/file?path=${encodeURIComponent(s.filePath)}&token=${encodeURIComponent(authToken)}`);
-	        if (!res.ok) {
-	          let msg = `打开失败（${res.status}）`;
-	          try {
+      try {
+        const res = await fetch(`/api/file?path=${encodeURIComponent(s.filePath)}&token=${encodeURIComponent(authToken)}`);
+        if (!res.ok) {
+          let msg = `打开失败（${res.status}）`;
+          try {
 	            const j = await res.json();
 	            if (j?.error) msg = `打开失败：${j.error}`;
 	          } catch {}
 	          showToast(`❌ ${msg}`);
 	          return false;
-	        }
-	        const data = await res.json();
-	        s._suppressDirty = true;
-	        s.cm.setValue(data?.content ?? '');
-	        s.cm.setCursor({ line: 0, ch: 0 });
-	        s.cm.scrollTo(0, 0);
-	        s._suppressDirty = false;
+        }
+        const data = await res.json();
+        applyEditorMode(s.cm, data?.path || s.filePath);
+        s._suppressDirty = true;
+        s.cm.setValue(data?.content ?? '');
+        s.cm.setCursor({ line: 0, ch: 0 });
+        s.cm.scrollTo(0, 0);
+        s._suppressDirty = false;
 	        s.dirty = false;
 	        s.mtimeMs = data?.mtimeMs;
 	        s.size = data?.size;
@@ -3594,6 +3643,7 @@
         lineWrapping: false,
         viewportMargin: 20,
       });
+      applyEditorMode(cm, filePath);
 	      try { cm.setSize('100%', '100%'); } catch {}
 
 	      const session = {
